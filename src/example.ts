@@ -170,7 +170,7 @@ async function main() {
 
   // 트랜잭션 시작 - 사용할 스토어 명시
   const tx = db.startTransaction(['users', 'posts'], { 
-    mode: 'readwrite',
+    mode: 'write',
   });
 
   // 동기적으로 요청 쌓기 (await 없이!)
