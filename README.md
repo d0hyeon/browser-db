@@ -2,18 +2,18 @@
 
 A type-safe IndexedDB layer that brings structure to client-side storage.
 
+[Live Example](https://stackblitz.com/edit/schema-idb)
+
 ```ts
 const db = openDB({
   name: "MyApp",
-  version: 1,
+  versionStrategy: "auto",
   stores: [usersStore] as const,
 });
 
 await db.users.put({ id: "u1", name: "Kim", email: "kim@example.com" });
 const user = await db.users.get("u1");
 ```
-
-[Live Example](https://stackblitz.com/edit/schema-idb)
 
 ---
 
@@ -60,7 +60,7 @@ import { openDB } from "schema-idb";
 
 const db = openDB({
   name: "MyApp",
-  version: 1,
+  versionStrategy: "auto",
   stores: [usersStore] as const,
 });
 ```
@@ -223,6 +223,10 @@ const user = await db.users
 schema-idb exposes transactions as synchronous write batches across multiple stores.
 
 ```ts
+// Single store
+const tx = db.startTransaction("accounts");
+
+// Multiple stores
 const tx = db.startTransaction(["accounts", "logs"]);
 
 // Queue operations (no await between them)
@@ -235,6 +239,9 @@ await tx.commit();
 
 // Or abort
 tx.abort();
+
+// Access underlying IDBTransaction if needed
+tx.raw;
 ```
 
 Read operations are not available inside transactions. IndexedDB transactions auto-commit after any `await`, so reads must happen outside the transaction.
@@ -312,10 +319,36 @@ const db = openDB({
 - Index modifications
 - Index deletions
 
-### Requires manual migration (throws error)
+### Requires manual migration (throws error by default)
 
 - Store deletions (data loss)
 - keyPath changes (requires store recreation)
+
+### Handling removed stores
+
+When a store is removed from the schema, you can choose how to handle it:
+
+```ts
+const db = openDB({
+  name: "MyApp",
+  versionStrategy: "auto",
+  // 'error' (default): Throws an error when stores are removed
+  // 'preserve': Renames removed stores to __storeName_deleted__ as backup
+  removedStoreStrategy: "preserve",
+  stores: [usersStore] as const,
+});
+```
+
+To explicitly delete a store (including backups), use a migration:
+
+```ts
+const usersStore = defineStore("users", {
+  // ...
+}).addMigration("003-delete-old-store", (db) => {
+  db.deleteObjectStore("oldStore");
+  db.deleteObjectStore("__oldStore_deleted__"); // Remove backup too
+});
+```
 
 ---
 
@@ -336,14 +369,19 @@ type User = InferStore<typeof usersStore>;
 ### Database
 
 ```ts
-const db = openDB({ name, version, stores });
+const db = openDB({
+  name: "MyApp",
+  versionStrategy: "auto", // or "explicit" with version number
+  removedStoreStrategy: "error", // or "preserve"
+  stores: [usersStore] as const,
+});
 
 db.waitForReady(); // Promise<void>
 db.ready; // boolean
 db.close(); // Close connection
 db.version; // Current version number
 db.raw; // Underlying IDBDatabase
-```
+````
 
 ### Store operations
 
@@ -357,6 +395,19 @@ db.store.delete(key); // Delete by key
 db.store.clear(); // Delete all
 db.store.count(); // Count records
 db.store.query(options); // Query with conditions
+```
+
+### Transactions
+
+```ts
+const tx = db.startTransaction("store"); // Single store
+const tx = db.startTransaction(["store1", "store2"]); // Multiple stores
+
+tx.store.put(value); // Queue operations
+tx.store.delete(key);
+await tx.commit(); // Commit all
+tx.abort(); // Or abort
+tx.raw; // Underlying IDBTransaction
 ```
 
 ### Utilities

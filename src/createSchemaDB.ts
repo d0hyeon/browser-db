@@ -63,6 +63,12 @@ export interface SchemaDBConfig<TStores extends readonly AnySchemaStore[]> {
   name: string;
   version?: number;
   versionStrategy?: 'explicit' | 'auto';
+  /**
+   * Strategy for handling stores removed from schema
+   * - 'error': Throw an error (default)
+   * - 'preserve': Rename to __storeName_deleted__ as backup
+   */
+  removedStoreStrategy?: 'error' | 'preserve';
   stores: TStores;
   onBlocked?: () => void;
   onVersionChange?: () => void;
@@ -442,6 +448,7 @@ export function openDB<const TStores extends readonly AnySchemaStore[]>(
     name,
     version: explicitVersion,
     versionStrategy = 'explicit',
+    removedStoreStrategy = 'error',
     stores,
     onBlocked,
     onVersionChange,
@@ -488,6 +495,7 @@ export function openDB<const TStores extends readonly AnySchemaStore[]>(
     name,
     explicitVersion,
     versionStrategy,
+    removedStoreStrategy,
     stores,
     allMigrations,
     onBlocked,
@@ -505,6 +513,7 @@ async function initializeDatabase<TStores extends readonly AnySchemaStore[]>(
   name: string,
   explicitVersion: number | undefined,
   versionStrategy: 'explicit' | 'auto',
+  removedStoreStrategy: 'error' | 'preserve',
   stores: TStores,
   allMigrations: Migration[],
   onBlocked?: () => void,
@@ -518,7 +527,7 @@ async function initializeDatabase<TStores extends readonly AnySchemaStore[]>(
 
     if (versionStrategy === 'auto') {
       // Auto-detect schema changes and determine version
-      const autoResult = await determineAutoVersion(name, stores);
+      const autoResult = await determineAutoVersion(name, stores, { removedStoreStrategy });
       version = autoResult.version;
       autoChanges = autoResult.changes;
 

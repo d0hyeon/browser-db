@@ -345,4 +345,88 @@ describe('openDB', () => {
       db.close();
     });
   });
+
+  describe('removedStoreStrategy', () => {
+    it('기본값(error)일 때 스토어 삭제 시 에러가 발생해야 함', async () => {
+      const usersStore = defineStore('users', {
+        id: field.string().primaryKey(),
+      });
+
+      const postsStore = defineStore('posts', {
+        id: field.string().primaryKey(),
+        title: field.string(),
+      });
+
+      // 두 스토어로 DB 생성
+      const db1 = openDB({
+        name: 'removed-store-error-db',
+        versionStrategy: 'auto',
+        stores: [usersStore, postsStore] as const,
+      });
+
+      await db1.waitForReady();
+      await db1.posts.put({ id: 'p1', title: 'Test' });
+      db1.close();
+
+      // posts 스토어 없이 다시 열기 - 에러 발생해야 함
+      await expect(async () => {
+        const db2 = openDB({
+          name: 'removed-store-error-db',
+          versionStrategy: 'auto',
+          stores: [usersStore] as const,
+        });
+        await db2.waitForReady();
+      }).rejects.toThrow(/would be deleted/);
+    });
+
+    it('preserve일 때 스토어가 __storeName_deleted__로 리네이밍되어야 함', async () => {
+      const usersStore = defineStore('users', {
+        id: field.string().primaryKey(),
+      });
+
+      const postsStore = defineStore('posts', {
+        id: field.string().primaryKey(),
+        title: field.string(),
+      });
+
+      // 두 스토어로 DB 생성
+      const db1 = openDB({
+        name: 'removed-store-preserve-db',
+        versionStrategy: 'auto',
+        stores: [usersStore, postsStore] as const,
+      });
+
+      await db1.waitForReady();
+      await db1.posts.put({ id: 'p1', title: 'Test Post' });
+      db1.close();
+
+      // posts 스토어 없이 preserve로 다시 열기
+      const db2 = openDB({
+        name: 'removed-store-preserve-db',
+        versionStrategy: 'auto',
+        removedStoreStrategy: 'preserve',
+        stores: [usersStore] as const,
+      });
+
+      await db2.waitForReady();
+
+      // 백업 스토어가 생성되었는지 확인
+      expect(db2.raw.objectStoreNames.contains('__posts_deleted__')).toBe(true);
+      expect(db2.raw.objectStoreNames.contains('posts')).toBe(false);
+
+      // 백업 스토어의 데이터가 유지되었는지 확인
+      const tx = db2.raw.transaction('__posts_deleted__', 'readonly');
+      const store = tx.objectStore('__posts_deleted__');
+      const request = store.get('p1');
+
+      await new Promise<void>((resolve) => {
+        request.onsuccess = () => {
+          expect(request.result).toEqual({ id: 'p1', title: 'Test Post' });
+          resolve();
+        };
+      });
+
+      db2.close();
+    });
+  });
 });

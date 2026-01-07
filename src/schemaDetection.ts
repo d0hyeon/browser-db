@@ -50,6 +50,7 @@ export interface DesiredStoreSchema {
 export type SchemaChangeType =
   | { type: 'store_add'; storeName: string }
   | { type: 'store_delete'; storeName: string }
+  | { type: 'store_rename'; oldName: string; newName: string }
   | { type: 'keypath_change'; storeName: string; oldKeyPath: string | string[] | null; newKeyPath: string | string[] | undefined }
   | { type: 'index_add'; storeName: string; indexName: string; index: IndexDefinition }
   | { type: 'index_delete'; storeName: string; indexName: string }
@@ -249,6 +250,68 @@ export function applySafeChanges(
   changes: SchemaChangeType[],
   stores: readonly { name: string; keyPath: string | string[] | undefined; indexes: IndexDefinition[] }[]
 ): void {
+  // Process renames - collect store info first, then delete, then create new
+  const renameChanges = changes.filter((c): c is Extract<SchemaChangeType, { type: 'store_rename' }> => c.type === 'store_rename');
+
+  // Collect data from stores to be renamed before deleting them
+  const renameDataMap = new Map<string, {
+    keyPath: string | string[] | null;
+    indexes: Array<{ name: string; keyPath: string | string[]; unique: boolean; multiEntry: boolean }>;
+    newName: string;
+  }>();
+
+  for (const change of renameChanges) {
+    const oldStore = tx.objectStore(change.oldName);
+
+    // Collect index info
+    const indexes: Array<{ name: string; keyPath: string | string[]; unique: boolean; multiEntry: boolean }> = [];
+    const indexNames = Array.from({ length: oldStore.indexNames.length }, (_, i) => oldStore.indexNames.item(i)!);
+    for (const indexName of indexNames) {
+      const index = oldStore.index(indexName);
+      indexes.push({
+        name: indexName,
+        keyPath: index.keyPath as string | string[],
+        unique: index.unique,
+        multiEntry: index.multiEntry,
+      });
+    }
+
+    renameDataMap.set(change.oldName, {
+      keyPath: oldStore.keyPath,
+      indexes,
+      newName: change.newName,
+    });
+
+    // Queue getAll request - it will complete before transaction ends
+    const getAllRequest = oldStore.getAll();
+    getAllRequest.onsuccess = () => {
+      const records = getAllRequest.result;
+
+      // Create new store and copy data
+      const storeInfo = renameDataMap.get(change.oldName)!;
+      const newStore = db.createObjectStore(storeInfo.newName, {
+        keyPath: storeInfo.keyPath as string | string[] | undefined,
+      });
+
+      // Create indexes
+      for (const idx of storeInfo.indexes) {
+        newStore.createIndex(idx.name, idx.keyPath, {
+          unique: idx.unique,
+          multiEntry: idx.multiEntry,
+        });
+      }
+
+      // Copy records
+      for (const record of records) {
+        newStore.put(record);
+      }
+    };
+
+    // Delete old store immediately (getAll request already queued)
+    db.deleteObjectStore(change.oldName);
+  }
+
+  // Then process other changes
   for (const change of changes) {
     switch (change.type) {
       case 'store_add': {
@@ -376,13 +439,20 @@ export async function openDatabaseForSchemaRead(dbName: string): Promise<IDBData
   });
 }
 
+/** Options for determineAutoVersion */
+export interface AutoVersionOptions {
+  removedStoreStrategy?: 'error' | 'preserve';
+}
+
 /**
  * Determine the version needed for auto-versioning
  */
 export async function determineAutoVersion(
   dbName: string,
-  stores: readonly { name: string; keyPath: string | string[] | undefined; indexes: IndexDefinition[] }[]
+  stores: readonly { name: string; keyPath: string | string[] | undefined; indexes: IndexDefinition[] }[],
+  options: AutoVersionOptions = {}
 ): Promise<{ version: number; changes: SchemaChanges | null; needsUpgrade: boolean }> {
+  const { removedStoreStrategy = 'error' } = options;
   const existingDb = await openDatabaseForSchemaRead(dbName);
 
   if (!existingDb) {
@@ -403,12 +473,36 @@ export async function determineAutoVersion(
     return { version: currentVersion, changes: null, needsUpgrade: false };
   }
 
+  // Process dangerous changes based on strategy
+  const remainingDangerous: SchemaChangeType[] = [];
+
+  for (const change of changes.dangerous) {
+    if (change.type === 'store_delete') {
+      if (removedStoreStrategy === 'preserve') {
+        // Convert store_delete to store_rename (safe change)
+        changes.safe.push({
+          type: 'store_rename',
+          oldName: change.storeName,
+          newName: `__${change.storeName}_deleted__`,
+        });
+      } else {
+        // Keep as dangerous
+        remainingDangerous.push(change);
+      }
+    } else {
+      // Other dangerous changes remain dangerous
+      remainingDangerous.push(change);
+    }
+  }
+
+  changes.dangerous = remainingDangerous;
+
   if (changes.dangerous.length > 0) {
     // Has dangerous changes, throw error
     const dangerousDescriptions = changes.dangerous.map(c => {
       switch (c.type) {
         case 'store_delete':
-          return `Store "${c.storeName}" would be deleted. Use a manual migration to handle this.`;
+          return `Store "${c.storeName}" would be deleted. Use removedStoreStrategy: 'preserve' to backup, or add a migration to explicitly delete it.`;
         case 'keypath_change':
           return `Store "${c.storeName}" keyPath changed from "${c.oldKeyPath}" to "${c.newKeyPath}". This requires recreating the store with a manual migration.`;
         default:
