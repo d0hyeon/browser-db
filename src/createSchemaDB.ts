@@ -17,7 +17,11 @@ import {
   determineAutoVersion,
   applySafeChanges,
   openDatabaseForSchemaRead,
+  readExistingSchema,
+  toDesiredSchema,
+  detectSchemaChanges,
   type SchemaChanges,
+  type SchemaChangeType,
 } from './schemaDetection.js';
 import {
   ensureSchemaHistoryStore,
@@ -560,8 +564,84 @@ async function initializeDatabase<TStores extends readonly AnySchemaStore[]>(
       // Try to read applied migrations for explicit version strategy too
       const existingDb = await openDatabaseForSchemaRead(name);
       if (existingDb) {
+        const currentVersion = existingDb.version;
         appliedMigrations = await getAppliedMigrations(existingDb);
+
+        // In explicit mode, validate schema changes directly from the open DB
+        // (Don't call determineAutoVersion which would try to open DB again)
+        const existingSchema = readExistingSchema(existingDb);
+        const desiredSchema = toDesiredSchema(stores);
         existingDb.close();
+
+        const changes = detectSchemaChanges(existingSchema, desiredSchema);
+
+        if (changes.hasChanges) {
+          // Process dangerous changes based on removedStoreStrategy
+          const remainingDangerous: SchemaChangeType[] = [];
+
+          for (const change of changes.dangerous) {
+            if (change.type === 'store_delete') {
+              if (removedStoreStrategy === 'preserve') {
+                // Convert store_delete to store_rename (safe change)
+                changes.safe.push({
+                  type: 'store_rename',
+                  oldName: change.storeName,
+                  newName: `__${change.storeName}_deleted__`,
+                });
+              } else {
+                // Keep as dangerous - will throw error
+                remainingDangerous.push(change);
+              }
+            } else {
+              // Other dangerous changes remain dangerous
+              remainingDangerous.push(change);
+            }
+          }
+
+          // Throw error if there are dangerous changes
+          if (remainingDangerous.length > 0) {
+            const dangerousDescriptions = remainingDangerous.map(c => {
+              switch (c.type) {
+                case 'store_delete':
+                  return `Store "${c.storeName}" would be deleted. Use removedStoreStrategy: 'preserve' to backup, or add a migration to explicitly delete it.`;
+                case 'keypath_change':
+                  return `Store "${c.storeName}" keyPath changed from "${c.oldKeyPath}" to "${c.newKeyPath}". This requires recreating the store with a manual migration.`;
+                default:
+                  return `Unknown dangerous change`;
+              }
+            });
+
+            const errorMessage =
+              `Dangerous schema changes detected:\n${dangerousDescriptions.join('\n')}\n\n` +
+              `Add explicit migrations to handle these changes safely.`;
+
+            console.error('[schema-idb]', errorMessage);
+            throw new Error(errorMessage);
+          }
+
+          changes.dangerous = remainingDangerous;
+          autoChanges = changes;
+
+          // If schema changes detected but version not bumped, warn the developer
+          if (version <= currentVersion) {
+            const changeDescriptions = changes.safe.map(c => {
+              switch (c.type) {
+                case 'store_add': return `- Add store "${c.storeName}"`;
+                case 'store_rename': return `- Rename store "${c.oldName}" to "${c.newName}"`;
+                case 'index_add': return `- Add index "${c.indexName}" on "${c.storeName}"`;
+                case 'index_delete': return `- Delete index "${c.indexName}" from "${c.storeName}"`;
+                default: return `- Schema change`;
+              }
+            });
+
+            console.warn(
+              `[schema-idb] Schema changes detected but version not bumped:\n` +
+              `${changeDescriptions.join('\n')}\n` +
+              `Current DB version: ${currentVersion}, Provided version: ${version}\n` +
+              `Bump the version to apply these changes.`
+            );
+          }
+        }
       }
     }
 

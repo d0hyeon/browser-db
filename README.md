@@ -340,6 +340,23 @@ const db = openDB({
 });
 ```
 
+#### Behavior with explicit versioning
+
+When `versionStrategy` is `"explicit"`:
+
+- Schema changes are **detected** but **NOT applied** automatically
+- `removedStoreStrategy` is evaluated for preview purposes only
+- A warning is logged if schema changes are detected but version is not bumped
+
+```
+[schema-idb] Schema changes detected but version not bumped:
+- Rename store "oldStore" to "__oldStore_deleted__"
+Current DB version: 1, Provided version: 1
+Bump the version to apply these changes.
+```
+
+**Important:** `removedStoreStrategy` does not perform migrations in explicit mode. It only describes what _would_ happen after a version bump. To apply the changes, increment the `version` number.
+
 To explicitly delete a store (including backups), use a migration:
 
 ```ts

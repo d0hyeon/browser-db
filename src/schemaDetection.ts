@@ -435,6 +435,7 @@ export async function openDatabaseForSchemaRead(dbName: string): Promise<IDBData
     request.onupgradeneeded = () => {
       // Database is being created, abort and return null
       request.transaction?.abort();
+      resolve(null);
     };
   });
 }
@@ -510,10 +511,12 @@ export async function determineAutoVersion(
       }
     });
 
-    throw new Error(
+    const errorMessage =
       `Dangerous schema changes detected:\n${dangerousDescriptions.join('\n')}\n\n` +
-      `Add explicit migrations to handle these changes safely.`
-    );
+      `Add explicit migrations to handle these changes safely.`;
+
+    console.error('[schema-idb]', errorMessage);
+    throw new Error(errorMessage);
   }
 
   // Only safe changes, increment version
