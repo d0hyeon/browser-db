@@ -245,7 +245,8 @@ export interface WriteChain<TStores extends readonly StoreDefinition[]> {
 export interface StoreAccessor<T, K> {
   get(key: K): Promise<T | undefined>;
   getAll(options?: GetAllOptions): Promise<T[]>;
-  getAllByIndex(indexName: string, query?: IDBKeyRange | IDBValidKey): Promise<T[]>;
+  getBy(indexName: string, query: IDBKeyRange | IDBValidKey): Promise<T | undefined>;
+  getAllBy(indexName: string, query?: IDBKeyRange | IDBValidKey): Promise<T[]>;
   put(value: T, key?: K): Promise<K>;
   add(value: T, key?: K): Promise<K>;
   delete(key: K | IDBKeyRange): Promise<void>;

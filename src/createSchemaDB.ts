@@ -41,7 +41,11 @@ type StoreNames<TStores extends readonly AnySchemaStore[]> = TStores[number]['na
 export interface SchemaStoreAccessor<S extends StoreSchema> {
   get(key: PrimaryKeyType<S>): Promise<InferOutput<S> | undefined>;
   getAll(): Promise<InferOutput<S>[]>;
-  getAllByIndex<I extends IndexedFields<S> & string>(
+  getBy<I extends IndexedFields<S> & string>(
+    indexName: I,
+    query: IDBKeyRange | IDBValidKey
+  ): Promise<InferOutput<S> | undefined>;
+  getAllBy<I extends IndexedFields<S> & string>(
     indexName: I,
     query?: IDBKeyRange | IDBValidKey
   ): Promise<InferOutput<S>[]>;
@@ -50,7 +54,7 @@ export interface SchemaStoreAccessor<S extends StoreSchema> {
   delete(key: PrimaryKeyType<S> | IDBKeyRange): Promise<void>;
   clear(): Promise<void>;
   count(query?: IDBKeyRange | IDBValidKey): Promise<number>;
-  
+
   // Query API (type-safe)
   query(options: TypedQueryOptions<S>): Promise<InferOutput<S>[]>;
   query(): TypedQueryBuilder<InferOutput<S>, PrimaryKeyType<S>, S>;

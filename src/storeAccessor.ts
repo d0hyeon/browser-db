@@ -69,7 +69,18 @@ export function createStoreAccessor<T, K extends IDBValidKey>(
       return hasDefaults ? applyDefaultsToArray(result, defaults) : result;
     },
 
-    async getAllByIndex(
+    async getBy(
+      indexName: string,
+      query: IDBKeyRange | IDBValidKey
+    ): Promise<T | undefined> {
+      const tx = db.transaction(storeName, 'readonly');
+      const store = tx.objectStore(storeName);
+      const index = store.index(indexName);
+      const result = await getResult<T | undefined>(tx, index.get(query));
+      return hasDefaults ? applyDefaults(result, defaults) : result;
+    },
+
+    async getAllBy(
       indexName: string,
       query?: IDBKeyRange | IDBValidKey
     ): Promise<T[]> {

@@ -4,7 +4,8 @@
  * API 명세 (StoreAccessor):
  * - get(key): 키로 레코드 조회 (Promise<T | undefined>)
  * - getAll(): 모든 레코드 조회 (Promise<T[]>)
- * - getAllByIndex(indexName, query?): 인덱스로 레코드 조회 (Promise<T[]>)
+ * - getBy(indexName, query): 인덱스로 단일 레코드 조회 (Promise<T | undefined>)
+ * - getAllBy(indexName, query?): 인덱스로 레코드 조회 (Promise<T[]>)
  * - put(value, key?): 레코드 추가/수정 (Promise<K>)
  * - add(value, key?): 레코드 추가 (중복 시 에러) (Promise<K>)
  * - delete(key | IDBKeyRange): 레코드 삭제 (Promise<void>)
@@ -214,13 +215,42 @@ describe('CRUD 작업', () => {
     });
   });
 
-  describe('getAllByIndex()', () => {
+  describe('getBy()', () => {
+    it('인덱스로 단일 레코드를 조회할 수 있어야 함', async () => {
+      await db.users.put({ id: 'u1', name: 'Kim', email: 'kim@test.com' });
+      await db.users.put({ id: 'u2', name: 'Park', email: 'park@test.com' });
+
+      const user = await db.users.getBy('email', 'kim@test.com');
+
+      expect(user).toBeDefined();
+      expect(user?.id).toBe('u1');
+      expect(user?.email).toBe('kim@test.com');
+    });
+
+    it('일치하는 레코드가 없으면 undefined를 반환해야 함', async () => {
+      await db.users.put({ id: 'u1', name: 'Kim', email: 'kim@test.com' });
+
+      const user = await db.users.getBy('email', 'nonexistent@test.com');
+
+      expect(user).toBeUndefined();
+    });
+
+    it('기본값이 적용되어야 함', async () => {
+      await db.users.put({ id: 'u1', name: 'Kim', email: 'kim@test.com' });
+
+      const user = await db.users.getBy('email', 'kim@test.com');
+
+      expect(user?.age).toBe(0); // 기본값
+    });
+  });
+
+  describe('getAllBy()', () => {
     it('인덱스로 레코드를 조회할 수 있어야 함', async () => {
       await db.posts.put({ id: 'p1', title: 'Post 1', authorId: 'author1' });
       await db.posts.put({ id: 'p2', title: 'Post 2', authorId: 'author1' });
       await db.posts.put({ id: 'p3', title: 'Post 3', authorId: 'author2' });
 
-      const posts = await db.posts.getAllByIndex('authorId', 'author1');
+      const posts = await db.posts.getAllBy('authorId', 'author1');
 
       expect(posts).toHaveLength(2);
       expect(posts.every(p => p.authorId === 'author1')).toBe(true);
@@ -229,7 +259,7 @@ describe('CRUD 작업', () => {
     it('일치하는 레코드가 없으면 빈 배열을 반환해야 함', async () => {
       await db.posts.put({ id: 'p1', title: 'Post 1', authorId: 'author1' });
 
-      const posts = await db.posts.getAllByIndex('authorId', 'nonexistent');
+      const posts = await db.posts.getAllBy('authorId', 'nonexistent');
 
       expect(posts).toEqual([]);
     });
@@ -240,7 +270,7 @@ describe('CRUD 작업', () => {
       await db.users.put({ id: 'u3', name: 'Charlie', email: 'charlie@test.com', age: 40 });
 
       const emailRange = IDBKeyRange.bound('a', 'c');
-      const users = await db.users.getAllByIndex('email', emailRange);
+      const users = await db.users.getAllBy('email', emailRange);
 
       expect(users).toHaveLength(2);
       expect(users.map(u => u.name).sort()).toEqual(['Alice', 'Bob']);
@@ -343,11 +373,11 @@ describe('CRUD 작업', () => {
       expect(users[1].age).toBe(0);
     });
 
-    it('getAllByIndex()에서 기본값이 적용되어야 함', async () => {
+    it('getAllBy()에서 기본값이 적용되어야 함', async () => {
       // createdAt 기본값이 적용된 포스트 추가
       await db.posts.put({ id: 'p1', title: 'Post 1', authorId: 'author1' });
 
-      const posts = await db.posts.getAllByIndex('authorId', 'author1');
+      const posts = await db.posts.getAllBy('authorId', 'author1');
       expect(posts[0]).toBeDefined();
       expect(posts[0].title).toBe('Post 1');
     });

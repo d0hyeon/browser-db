@@ -388,7 +388,8 @@ db.raw; // Underlying IDBDatabase
 ```ts
 db.store.get(key); // Get by primary key
 db.store.getAll(); // Get all records
-db.store.getAllByIndex(index, value); // Get by index value
+db.store.getBy(index, value); // Get first match by index
+db.store.getAllBy(index, value); // Get all matches by index
 db.store.put(value); // Insert or update
 db.store.add(value); // Insert (fails if exists)
 db.store.delete(key); // Delete by key
