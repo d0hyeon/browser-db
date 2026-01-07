@@ -93,7 +93,8 @@ async function main() {
     status: 'active',
     role: UserRole.Admin,
   });
-
+  db.users.getBy('age', 24);
+ 
   await db.users.put({
     id: 'u3',
     name: 'Kim Junior',

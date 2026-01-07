@@ -5,6 +5,7 @@ import type {
   InferOutput,
   PrimaryKeyType,
   IndexedFields,
+  IndexFieldTypes,
 } from './field.js';
 import type { SchemaStoreDefinition } from './schema.js';
 import type { TypedQueryOptions, TypedQueryBuilder } from './query.js';
@@ -43,11 +44,11 @@ export interface SchemaStoreAccessor<S extends StoreSchema> {
   getAll(): Promise<InferOutput<S>[]>;
   getBy<I extends IndexedFields<S> & string>(
     indexName: I,
-    query: IDBKeyRange | IDBValidKey
+    query: IDBKeyRange | IndexFieldTypes<S>[I]
   ): Promise<InferOutput<S> | undefined>;
   getAllBy<I extends IndexedFields<S> & string>(
     indexName: I,
-    query?: IDBKeyRange | IDBValidKey
+    query?: IDBKeyRange | IndexFieldTypes<S>[I]
   ): Promise<InferOutput<S>[]>;
   put(value: InferInput<S>, key?: PrimaryKeyType<S>): Promise<PrimaryKeyType<S>>;
   add(value: InferInput<S>, key?: PrimaryKeyType<S>): Promise<PrimaryKeyType<S>>;

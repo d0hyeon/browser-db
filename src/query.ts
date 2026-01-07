@@ -2,7 +2,7 @@
  * Query Builder for IndexedDB
  */
 
-import type { StoreSchema, IndexedFields, IndexFieldTypes } from './field.js';
+import type { StoreSchema, IndexedFields, IndexFieldTypes, FieldType } from './field.js';
 
 // ============================================================================
 // Type Helpers
@@ -48,6 +48,34 @@ export interface WhereCondition<T = unknown> {
   startsWith?: string;  // Always string for prefix search
 }
 
+// ============================================================================
+// Type-safe Where Condition (with operator restrictions)
+// ============================================================================
+
+/**
+ * Type-safe where condition based on field type
+ * - startsWith is only available for string fields
+ * - Range operators (gt, gte, lt, lte, between) work with all comparable types
+ */
+export type TypedWhereCondition<T> = T extends string
+  ? {
+      eq?: T;
+      gt?: T;
+      gte?: T;
+      lt?: T;
+      lte?: T;
+      between?: [T, T];
+      startsWith?: string;
+    }
+  : {
+      eq?: T;
+      gt?: T;
+      gte?: T;
+      lt?: T;
+      lte?: T;
+      between?: [T, T];
+    };
+
 /** Generic query options (for non-schema use) */
 export interface QueryOptions {
   index?: string;
@@ -58,13 +86,21 @@ export interface QueryOptions {
 }
 
 /** Type-safe query options based on schema */
-export interface TypedQueryOptions<S extends StoreSchema> {
-  index?: IndexedFields<S>;
+export type TypedQueryOptions<S extends StoreSchema> = {
+  [I in IndexedFields<S>]: {
+    index: I;
+    where?: TypedWhereCondition<IndexFieldTypes<S>[I]>;
+    orderBy?: SortOrder;
+    limit?: number;
+    offset?: number;
+  };
+}[IndexedFields<S>] | {
+  index?: undefined;
   where?: WhereCondition<unknown>;
   orderBy?: SortOrder;
   limit?: number;
   offset?: number;
-}
+};
 
 /** Internal query state */
 interface QueryState {
@@ -520,21 +556,33 @@ export interface IndexQueryBuilder<T> {
   find(): Promise<T | undefined>;
 }
 
-/** Type-safe IndexQueryBuilder with value type inference */
-export interface TypedIndexQueryBuilder<T, S extends StoreSchema, I extends IndexedFields<S>> {
-  equals(value: IndexFieldTypes<S>[I]): FinalQueryBuilder<T>;
-  gt(value: IndexFieldTypes<S>[I]): FinalQueryBuilder<T>;
-  gte(value: IndexFieldTypes<S>[I]): FinalQueryBuilder<T>;
-  lt(value: IndexFieldTypes<S>[I]): FinalQueryBuilder<T>;
-  lte(value: IndexFieldTypes<S>[I]): FinalQueryBuilder<T>;
-  between(lower: IndexFieldTypes<S>[I], upper: IndexFieldTypes<S>[I]): FinalQueryBuilder<T>;
-  startsWith(prefix: IndexFieldTypes<S>[I] extends string ? string : never): FinalQueryBuilder<T>;
+/** Base methods available for all index types */
+interface BaseIndexQueryBuilder<T, V> {
+  equals(value: V): FinalQueryBuilder<T>;
+  gt(value: V): FinalQueryBuilder<T>;
+  gte(value: V): FinalQueryBuilder<T>;
+  lt(value: V): FinalQueryBuilder<T>;
+  lte(value: V): FinalQueryBuilder<T>;
+  between(lower: V, upper: V): FinalQueryBuilder<T>;
   orderBy(order: SortOrder): FinalQueryBuilder<T>;
   limit(count: number): FinalQueryBuilder<T>;
   offset(count: number): FinalQueryBuilder<T>;
   findAll(): Promise<T[]>;
   find(): Promise<T | undefined>;
 }
+
+/** String-only methods (startsWith) */
+interface StringIndexQueryBuilder<T> {
+  startsWith(prefix: string): FinalQueryBuilder<T>;
+}
+
+/** Type-safe IndexQueryBuilder with value type inference
+ * - For string indexes: includes startsWith method
+ * - For other types: startsWith method is not available
+ */
+export type TypedIndexQueryBuilder<T, S extends StoreSchema, I extends IndexedFields<S>> =
+  BaseIndexQueryBuilder<T, IndexFieldTypes<S>[I]> &
+  (IndexFieldTypes<S>[I] extends string ? StringIndexQueryBuilder<T> : {});
 
 export interface FinalQueryBuilder<T> {
   orderBy(order: SortOrder): FinalQueryBuilder<T>;

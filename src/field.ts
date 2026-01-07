@@ -411,6 +411,12 @@ export type IndexFieldTypes<S extends StoreSchema> = {
   [K in IndexedFields<S>]: S[K] extends FieldBuilder<infer T, boolean, boolean, boolean> ? T : never;
 };
 
+/**
+ * Get field type by field name
+ */
+export type FieldType<S extends StoreSchema, K extends keyof S> =
+  S[K] extends FieldBuilder<infer T, boolean, boolean, boolean> ? T : never;
+
 // ============================================================================
 // Store Type Inference
 // ============================================================================
