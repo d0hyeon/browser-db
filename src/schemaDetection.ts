@@ -350,48 +350,6 @@ export function applySafeChanges(
 }
 
 // ============================================================================
-// Schema Fingerprint
-// ============================================================================
-
-/**
- * Generate a hash/fingerprint of the schema for version detection
- * This is used to detect if schema has changed
- */
-export function generateSchemaFingerprint(
-  stores: readonly { name: string; keyPath: string | string[] | undefined; indexes: IndexDefinition[] }[]
-): string {
-  const normalized = stores
-    .map(store => ({
-      name: store.name,
-      keyPath: store.keyPath,
-      indexes: store.indexes
-        .map(i => ({
-          name: i.name,
-          keyPath: i.keyPath,
-          unique: i.unique ?? false,
-          multiEntry: i.multiEntry ?? false,
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name));
-
-  return JSON.stringify(normalized);
-}
-
-/**
- * Simple hash function for fingerprint
- */
-export function hashFingerprint(fingerprint: string): number {
-  let hash = 0;
-  for (let i = 0; i < fingerprint.length; i++) {
-    const char = fingerprint.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  return Math.abs(hash);
-}
-
-// ============================================================================
 // Version Detection
 // ============================================================================
 
