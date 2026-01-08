@@ -495,6 +495,12 @@ export async function determineAutoVersion(
     throw new Error(errorMessage);
   }
 
+  // Check if there are any actual changes to apply
+  if (changes.safe.length === 0) {
+    // All changes were ignored, no version bump needed
+    return { version: currentVersion, changes: null, needsUpgrade: false };
+  }
+
   // Only safe changes, increment version
   return { version: currentVersion + 1, changes, needsUpgrade: true };
 }
