@@ -332,13 +332,17 @@ When a store is removed from the schema, you can choose how to handle it:
 const db = openDB({
   name: "MyApp",
   versionStrategy: "auto",
-  // 'error' (default): Throws an error when stores are removed
-  // 'preserve': Renames removed stores to __storeName_deleted_v{version}__ as backup.
-  //             Preserved stores are isolated from the typed API to avoid future name collisions.
-  removedStoreStrategy: "preserve",
+  removedStoreStrategy: "preserve", // See options below
   stores: [usersStore] as const,
 });
 ```
+
+| Strategy | Behavior |
+| -------- | -------- |
+| `'error'` | Throws an error (default) |
+| `'preserve'` | Renames to `__storeName_deleted_v{version}__` as backup |
+| `'drop'` | Deletes the store and its data |
+| `'ignore'` | Keeps the store as-is (no changes) |
 
 #### Behavior with explicit versioning
 
@@ -398,7 +402,7 @@ function openDB<T extends readonly SchemaStoreDefinition[]>(options: {
   stores: T;
   versionStrategy?: "auto" | "explicit";
   version?: number;
-  removedStoreStrategy?: "error" | "preserve";
+  removedStoreStrategy?: "error" | "preserve" | "drop" | "ignore";
 }): SchemaDatabase<T>;
 ```
 
@@ -408,7 +412,7 @@ function openDB<T extends readonly SchemaStoreDefinition[]>(options: {
 | `stores` | `readonly SchemaStoreDefinition[]` | Store definitions created with `defineStore` |
 | `versionStrategy` | `"auto" \| "explicit"` | `"auto"` detects schema changes automatically. Default: `"explicit"` (recommended for production control) |
 | `version` | `number` | Required when `versionStrategy` is `"explicit"` |
-| `removedStoreStrategy` | `"error" \| "preserve"` | How to handle removed stores. Default: `"error"` |
+| `removedStoreStrategy` | `"error" \| "preserve" \| "drop" \| "ignore"` | How to handle removed stores. Default: `"error"` |
 
 ### SchemaDatabase
 
