@@ -613,5 +613,188 @@ describe('openDB', () => {
       warnSpy.mockRestore();
       db2.close();
     });
+
+    it('drop일 때 스토어가 완전히 삭제되어야 함', async () => {
+      const usersStore = defineStore('users', {
+        id: field.string().primaryKey(),
+      });
+
+      const postsStore = defineStore('posts', {
+        id: field.string().primaryKey(),
+        title: field.string(),
+      });
+
+      // 두 스토어로 DB 생성
+      const db1 = openDB({
+        name: 'removed-store-drop-db',
+        versionStrategy: 'auto',
+        stores: [usersStore, postsStore] as const,
+      });
+
+      await db1.waitForReady();
+      await db1.posts.put({ id: 'p1', title: 'Test Post' });
+      db1.close();
+
+      // posts 스토어 없이 drop으로 다시 열기
+      const db2 = openDB({
+        name: 'removed-store-drop-db',
+        versionStrategy: 'auto',
+        removedStoreStrategy: 'drop',
+        stores: [usersStore] as const,
+      });
+
+      await db2.waitForReady();
+
+      // posts 스토어가 완전히 삭제됨 (백업 없음)
+      expect(db2.raw.objectStoreNames.contains('posts')).toBe(false);
+      expect(db2.raw.objectStoreNames.contains('__posts_deleted_v1__')).toBe(false);
+
+      db2.close();
+    });
+
+    it('ignore일 때 스토어가 그대로 유지되고 버전도 변경되지 않아야 함', async () => {
+      const usersStore = defineStore('users', {
+        id: field.string().primaryKey(),
+      });
+
+      const postsStore = defineStore('posts', {
+        id: field.string().primaryKey(),
+        title: field.string(),
+      });
+
+      // 두 스토어로 DB 생성
+      const db1 = openDB({
+        name: 'removed-store-ignore-db',
+        versionStrategy: 'auto',
+        stores: [usersStore, postsStore] as const,
+      });
+
+      await db1.waitForReady();
+      const v1 = db1.version;
+      await db1.posts.put({ id: 'p1', title: 'Test Post' });
+      db1.close();
+
+      // posts 스토어 없이 ignore로 다시 열기
+      const db2 = openDB({
+        name: 'removed-store-ignore-db',
+        versionStrategy: 'auto',
+        removedStoreStrategy: 'ignore',
+        stores: [usersStore] as const,
+      });
+
+      await db2.waitForReady();
+
+      // 버전이 변경되지 않아야 함
+      expect(db2.version).toBe(v1);
+
+      // posts 스토어가 그대로 유지됨
+      expect(db2.raw.objectStoreNames.contains('posts')).toBe(true);
+      expect(db2.raw.objectStoreNames.contains('__posts_deleted_v1__')).toBe(false);
+
+      // 데이터도 그대로 유지됨
+      const tx = db2.raw.transaction('posts', 'readonly');
+      const store = tx.objectStore('posts');
+      const request = store.get('p1');
+
+      await new Promise<void>((resolve) => {
+        request.onsuccess = () => {
+          expect(request.result).toEqual({ id: 'p1', title: 'Test Post' });
+          resolve();
+        };
+      });
+
+      db2.close();
+    });
+
+    it('explicit 모드에서 drop이 동작해야 함', async () => {
+      const usersStore = defineStore('users', {
+        id: field.string().primaryKey(),
+      });
+
+      const postsStore = defineStore('posts', {
+        id: field.string().primaryKey(),
+        title: field.string(),
+      });
+
+      // 두 스토어로 DB 생성
+      const db1 = openDB({
+        name: 'explicit-drop-db',
+        version: 1,
+        versionStrategy: 'explicit',
+        stores: [usersStore, postsStore] as const,
+      });
+
+      await db1.waitForReady();
+      await db1.posts.put({ id: 'p1', title: 'Test Post' });
+      db1.close();
+
+      // posts 스토어 없이 drop으로, 버전 업해서 다시 열기
+      const db2 = openDB({
+        name: 'explicit-drop-db',
+        version: 2,
+        versionStrategy: 'explicit',
+        removedStoreStrategy: 'drop',
+        stores: [usersStore] as const,
+      });
+
+      await db2.waitForReady();
+
+      // posts 스토어가 완전히 삭제됨
+      expect(db2.raw.objectStoreNames.contains('posts')).toBe(false);
+      expect(db2.raw.objectStoreNames.contains('__posts_deleted_v1__')).toBe(false);
+
+      db2.close();
+    });
+
+    it('explicit 모드에서 ignore가 동작해야 함', async () => {
+      const usersStore = defineStore('users', {
+        id: field.string().primaryKey(),
+      });
+
+      const postsStore = defineStore('posts', {
+        id: field.string().primaryKey(),
+        title: field.string(),
+      });
+
+      // 두 스토어로 DB 생성
+      const db1 = openDB({
+        name: 'explicit-ignore-db',
+        version: 1,
+        versionStrategy: 'explicit',
+        stores: [usersStore, postsStore] as const,
+      });
+
+      await db1.waitForReady();
+      await db1.posts.put({ id: 'p1', title: 'Test Post' });
+      db1.close();
+
+      // posts 스토어 없이 ignore로, 버전 업해서 다시 열기
+      const db2 = openDB({
+        name: 'explicit-ignore-db',
+        version: 2,
+        versionStrategy: 'explicit',
+        removedStoreStrategy: 'ignore',
+        stores: [usersStore] as const,
+      });
+
+      await db2.waitForReady();
+
+      // posts 스토어가 그대로 유지됨
+      expect(db2.raw.objectStoreNames.contains('posts')).toBe(true);
+
+      // 데이터도 그대로 유지됨
+      const tx = db2.raw.transaction('posts', 'readonly');
+      const store = tx.objectStore('posts');
+      const request = store.get('p1');
+
+      await new Promise<void>((resolve) => {
+        request.onsuccess = () => {
+          expect(request.result).toEqual({ id: 'p1', title: 'Test Post' });
+          resolve();
+        };
+      });
+
+      db2.close();
+    });
   });
 });
