@@ -83,15 +83,74 @@ function createTypeBuilder<T>(): TypeBuilder<T> {
 }
 
 /** Type factory for nested objects/tuples */
-export const type = {
+export interface TypeFactory {
+  string(): TypeBuilder<string>;
+  number(): TypeBuilder<number>;
+  boolean(): TypeBuilder<boolean>;
+  date(): TypeBuilder<Date>;
+  custom<T>(): TypeBuilder<T>;
+  object<S extends ObjectSchema>(schema: (t: TypeFactory) => S): TypeBuilder<InferObjectType<S>>;
+  tuple<T extends TupleSchema>(schema: (t: TypeFactory) => T): TypeBuilder<InferTupleType<T>>;
+  enum<const T extends readonly string[]>(values: T): TypeBuilder<T[number]>;
+  nativeEnum<T extends Record<string, string | number>>(enumObj: T): TypeBuilder<T[keyof T]>;
+}
+
+export const type: TypeFactory = {
   string: () => createTypeBuilder<string>(),
   number: () => createTypeBuilder<number>(),
   boolean: () => createTypeBuilder<boolean>(),
   date: () => createTypeBuilder<Date>(),
-  custom: <T>() => createTypeBuilder<T>(),
-};
 
-export type TypeFactory = typeof type;
+  /** Custom type */
+  custom: <T>() => createTypeBuilder<T>(),
+
+  /**
+   * Nested object type
+   * @example
+   * t.object(t => ({ name: t.string(), age: t.number().optional() }))
+   */
+  object: <S extends ObjectSchema>(
+    schema: (t: TypeFactory) => S
+  ): TypeBuilder<InferObjectType<S>> => {
+    const _shape = schema(type);
+    return createTypeBuilder<InferObjectType<S>>();
+  },
+
+  /**
+   * Nested tuple type
+   * @example
+   * t.tuple(t => [t.number(), t.number()])  // [number, number]
+   */
+  tuple: <T extends TupleSchema>(
+    schema: (t: TypeFactory) => T
+  ): TypeBuilder<InferTupleType<T>> => {
+    const _shape = schema(type);
+    return createTypeBuilder<InferTupleType<T>>();
+  },
+
+  /**
+   * Enum type from string literals
+   * @example
+   * t.enum(['active', 'inactive', 'pending'] as const)
+   */
+  enum: <const T extends readonly string[]>(
+    values: T
+  ): TypeBuilder<T[number]> => {
+    return createTypeBuilder<T[number]>();
+  },
+
+  /**
+   * Native TypeScript enum type
+   * @example
+   * enum Status { Active, Inactive }
+   * t.nativeEnum(Status)
+   */
+  nativeEnum: <T extends Record<string, string | number>>(
+    enumObj: T
+  ): TypeBuilder<T[keyof T]> => {
+    return createTypeBuilder<T[keyof T]>();
+  },
+};
 
 // ============================================================================
 // Field Definition Types
@@ -295,6 +354,9 @@ type InferTupleType<T extends TupleSchema> = {
  *   
  *   // Native Enum
  *   role: field.nativeEnum(UserRole),
+ *
+ *   // Custom type
+ *   metadata: field.custom<Record<string, unknown>>(),
  * });
  * ```
  */
@@ -310,6 +372,13 @@ export const field = {
 
   /** Date field */
   date: () => createFieldBuilder<Date>(),
+
+  /**
+   * Custom typed field
+   * @example
+   * field.custom<MyType>()
+   */
+  custom: <T>() => createFieldBuilder<T>(),
 
   /**
    * Object field with schema definition
