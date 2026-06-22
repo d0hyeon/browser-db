@@ -346,16 +346,18 @@ export type InferInput<S extends StoreSchema> =
 
 /**
  * Infer output field type
+ * _hasDefault does NOT affect output type: defaults are write-time injected
+ * and do not guarantee presence on read (raw writes / migrated records may omit them).
+ * Output type is decided solely by _autoIncrement (IDB engine always fills it)
+ * and _optional (field may be absent on read).
  */
 type InferOutputField<F> =
-  F extends { _def: { _type: infer T; _optional: infer Optional; _hasDefault: infer HasDefault; _autoIncrement: infer AutoInc } }
-    ? HasDefault extends true
+  F extends { _def: { _type: infer T; _optional: infer Optional; _autoIncrement: infer AutoInc } }
+    ? AutoInc extends true
       ? T
-      : AutoInc extends true
-        ? T  // autoIncrement fields are always present in output
-        : Optional extends true
-          ? T | undefined
-          : T
+      : Optional extends true
+        ? T | undefined
+        : T
     : never;
 
 /**

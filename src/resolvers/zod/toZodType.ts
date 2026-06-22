@@ -30,6 +30,6 @@ function baseFromKind(def: FieldDef): ZodTypeAny {
 export function toZodType(def: FieldDef): ZodTypeAny {
   let schema = baseFromKind(def);
   if (def._optional) schema = schema.optional();
-  // _hasDefault는 쓰기 주입되므로 필수 — .optional() 붙이지 않음
+  // validation은 _optional 여부만으로 결정한다. _hasDefault는 쓰기 주입이므로 유효성 검사와 무관하다.
   return schema;
 }
