@@ -207,14 +207,14 @@ type InferTupleType<T extends TupleSchema> = {
  *   tags: field.string().array(),
  *   
  *   // Object with schema
- *   address: field.object(t => ({
- *     detail: t.string(),
- *     post: t.string(),
- *     zipCode: t.number().optional(),
- *   })).optional().default({ detail: '', post: '' }),
- *   
+ *   address: field.object({
+ *     detail: field.string(),
+ *     post: field.string(),
+ *     zipCode: field.number().optional(),
+ *   }).optional().default({ detail: '', post: '' }),
+ *
  *   // Tuple
- *   coordinate: field.tuple(t => [t.number(), t.number()]),
+ *   coordinate: field.tuple([field.number(), field.number()]),
  *   
  *   // Enum
  *   status: field.enum(['active', 'inactive'] as const),

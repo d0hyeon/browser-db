@@ -7,7 +7,6 @@ import './App.css'
 // =============================================================================
 // Schema Definition
 // =============================================================================
-const Status = ['A', 'B'] as const;
 const todosStore = defineStore('todos', {
   id: field.string().primaryKey(),
   title: field.string(),
@@ -55,7 +54,6 @@ function TodoApp() {
     queryKey: ['todos'],
     queryFn: async () => {
       const data = await db.todos.getAll()
-      console.log('??', data);
       return data;
     },
   })
@@ -74,7 +72,6 @@ function TodoApp() {
   const addTodo = useMutation({
     mutationFn: async (title: string) => {
       await db.todos.add({ id: crypto.randomUUID(), title })
-      console.log('끝남')
     },
     onSuccess: () => queryClient.refetchQueries({ queryKey: ['todos'] }),
   })
