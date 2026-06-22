@@ -4,6 +4,7 @@
 
 import { openDB, defineStore, field, deleteDB } from './index.js';
 import type { InferStore } from './index.js';
+import { zodResolver } from './resolvers/zod/index.js';
 
 // ============================================================================
 // 1. Define Stores with Drizzle/Zod-style schema
@@ -40,14 +41,14 @@ const usersStore = defineStore('users', {
   
   // Native Enum
   role: field.nativeEnum(UserRole).default(UserRole.User),
-});
+}).use(zodResolver()); // 런타임 검증: get 시 Zod 스키마로 레코드 검증
 
 const postsStore = defineStore('posts', {
   id: field.number().primaryKey(),
   title: field.string(),
   content: field.string(),
   authorId: field.string().index(),
-  createdAt: field.date().default(new Date()),
+  createdAt: field.date().default(() => new Date()), // 팩토리: add/put 시점마다 새 Date 생성
 })
 
 // ============================================================================

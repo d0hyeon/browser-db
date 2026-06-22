@@ -272,6 +272,8 @@ export function zodResolver(): StoreResolver {
 **의존성 방향 단속(필수 전제)**: 코어(`src/**`)는 `resolvers/zod`/`zod`를 **절대 import하지 않는다.**
 의존성은 `resolvers/zod → core` 한 방향만. 코어가 리졸버를 한 번이라도 import하면 (a)가 깨진다.
 
+단일 패키지 — `rootDir: ./src` 제약상 리졸버는 `src/resolvers/zod/`에 두며 `dist/resolvers/zod/`로 출력된다.
+
 | 원하는 것 | 수단 |
 | --- | --- |
 | 코어만 쓰면 zod 번들 0 | (a) 서브패스 + 트리셰이킹 |
@@ -292,7 +294,7 @@ src/
   createSchemaDB.ts # validators를 accessor까지 전달 (defaults와 동일 경로)
   index.ts          # StoreResolver 타입 export
 
-resolvers/
+src/resolvers/
   zod/
     index.ts        # zodResolver() 팩토리
     buildZodSchema.ts
@@ -301,7 +303,7 @@ resolvers/
 package.json        # exports에 "./resolvers/zod" 서브패스, zod를 optional peerDep
 ```
 
-빌드: `tsc`가 `resolvers/`도 `dist/resolvers/`로 출력하도록 `tsconfig`/`include` 확인.
+빌드: `tsc`가 `src/resolvers/`도 `dist/resolvers/`로 출력하도록 `tsconfig`/`include` 확인.
 서브패스가 `dist/resolvers/zod/index.js`를 가리키므로 빌드 출력 경로 정합 필요.
 
 소유 주체 기준: 검증 정보 보존은 field의 책임이므로 `field.ts`,
