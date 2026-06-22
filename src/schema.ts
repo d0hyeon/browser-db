@@ -6,6 +6,7 @@ import type {
   PrimaryKeyType,
 } from './field.js';
 import type { StoreDefinition, IndexDefinition, Migration, MigrationFn } from './types.js';
+import type { StoreResolver } from './resolver.js';
 
 // ============================================================================
 // Store Options
@@ -46,6 +47,8 @@ export interface SchemaStoreBuilder<
    * ```
    */
   addMigration(name: string, up: MigrationFn): SchemaStoreBuilder<S, TName>;
+  /** 검증 리졸버를 누적한다. 불변 — 새 빌더를 반환한다. */
+  use(resolver: StoreResolver): SchemaStoreBuilder<S, TName>;
 }
 
 // ============================================================================
@@ -62,6 +65,7 @@ export interface SchemaStoreDefinition<
   autoIncrement: boolean;
   indexes: IndexDefinition[];
   migrations: Migration[];
+  resolvers: StoreResolver[];
   defaults: Partial<InferOutput<S>>;
 
   // Phantom types for inference
@@ -150,6 +154,12 @@ function createStoreBuilder<S extends StoreSchema, TName extends string>(
         migrations: newMigrations,
       });
     },
+    use(resolver: StoreResolver): SchemaStoreBuilder<S, TName> {
+      return createStoreBuilder({
+        ...definition,
+        resolvers: [...definition.resolvers, resolver],
+      });
+    },
   };
 
   return builder;
@@ -226,6 +236,7 @@ export function defineStore<const TName extends string, S extends StoreSchema>(
     autoIncrement,
     indexes,
     migrations: [...migrations].sort((a, b) => a.name.localeCompare(b.name)),
+    resolvers: [],
     defaults: defaults as Partial<InferOutput<S>>,
     _input: {} as InferInput<S>,
     _output: {} as InferOutput<S>,
