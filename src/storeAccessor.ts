@@ -12,27 +12,18 @@ async function getResult<T>(tx: IDBTransaction, request: IDBRequest): Promise<T>
 }
 
 /**
- * Apply default values to a record
+ * 쓰기 시 누락된 필드에 default 값을 채운다.
+ * 함수 default는 매 호출마다 실행된다.
  */
-function applyDefaults<T>(
-  value: T | undefined,
-  defaults: Partial<T>
-): T | undefined {
-  if (value === undefined) return undefined;
-  
-  // Merge defaults with value (value takes precedence)
-  return { ...defaults, ...value };
-}
-
-/**
- * Apply defaults to an array of records
- */
-function applyDefaultsToArray<T>(
-  values: T[],
-  defaults: Partial<T>
-): T[] {
-  if (Object.keys(defaults).length === 0) return values;
-  return values.map((v) => ({ ...defaults, ...v }));
+function applyWriteDefaults<T>(value: T, defaults: Record<string, unknown>): T {
+  if (Object.keys(defaults).length === 0) return value;
+  const out = { ...(value as Record<string, unknown>) };
+  for (const [k, d] of Object.entries(defaults)) {
+    if (out[k] === undefined) {
+      out[k] = typeof d === 'function' ? (d as () => unknown)() : d;
+    }
+  }
+  return out as T;
 }
 
 /**
@@ -49,24 +40,21 @@ export interface StoreAccessorWithQuery<T, K extends IDBValidKey> extends StoreA
 export function createStoreAccessor<T, K extends IDBValidKey>(
   db: IDBDatabase,
   storeName: string,
-  defaults: Partial<T> = {}
+  defaults: Record<string, unknown> = {}
 ): StoreAccessorWithQuery<T, K> {
-  const hasDefaults = Object.keys(defaults).length > 0;
-  const queryFn = createQueryFunction<T, K>(db, storeName, defaults);
+  const queryFn = createQueryFunction<T, K>(db, storeName, defaults as Partial<T>);
 
   return {
     async get(key: K): Promise<T | undefined> {
       const tx = db.transaction(storeName, 'readonly');
       const store = tx.objectStore(storeName);
-      const result = await getResult<T | undefined>(tx, store.get(key));
-      return hasDefaults ? applyDefaults(result, defaults) : result;
+      return getResult<T | undefined>(tx, store.get(key));
     },
 
     async getAll(options?: GetAllOptions): Promise<T[]> {
       const tx = db.transaction(storeName, 'readonly');
       const store = tx.objectStore(storeName);
-      const result = await getResult<T[]>(tx, store.getAll(options?.query, options?.count));
-      return hasDefaults ? applyDefaultsToArray(result, defaults) : result;
+      return getResult<T[]>(tx, store.getAll(options?.query, options?.count));
     },
 
     async getBy(
@@ -76,8 +64,7 @@ export function createStoreAccessor<T, K extends IDBValidKey>(
       const tx = db.transaction(storeName, 'readonly');
       const store = tx.objectStore(storeName);
       const index = store.index(indexName);
-      const result = await getResult<T | undefined>(tx, index.get(query));
-      return hasDefaults ? applyDefaults(result, defaults) : result;
+      return getResult<T | undefined>(tx, index.get(query));
     },
 
     async getAllBy(
@@ -87,20 +74,19 @@ export function createStoreAccessor<T, K extends IDBValidKey>(
       const tx = db.transaction(storeName, 'readonly');
       const store = tx.objectStore(storeName);
       const index = store.index(indexName);
-      const result = await getResult<T[]>(tx, index.getAll(query));
-      return hasDefaults ? applyDefaultsToArray(result, defaults) : result;
+      return getResult<T[]>(tx, index.getAll(query));
     },
 
     async put(value: T, key?: K): Promise<K> {
       const tx = db.transaction(storeName, 'readwrite');
       const store = tx.objectStore(storeName);
-      return getResult<K>(tx, store.put(value, key));
+      return getResult<K>(tx, store.put(applyWriteDefaults(value, defaults), key));
     },
 
     async add(value: T, key?: K): Promise<K> {
       const tx = db.transaction(storeName, 'readwrite');
       const store = tx.objectStore(storeName);
-      return getResult<K>(tx, store.add(value, key));
+      return getResult<K>(tx, store.add(applyWriteDefaults(value, defaults), key));
     },
 
     async delete(key: K | IDBKeyRange): Promise<void> {

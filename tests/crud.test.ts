@@ -347,26 +347,64 @@ describe('CRUD 작업', () => {
     });
   });
 
+  describe('default 쓰기 주입', () => {
+    it('put 시 누락된 default 값을 DB에 저장한다', async () => {
+      const users = defineStore('u', {
+        id: field.string().primaryKey(),
+        role: field.string().default('member'),
+      });
+      const db = openDB({ name: 'def-write', version: 1, stores: [users] as const });
+      await db.waitForReady();
+      await db.u.put({ id: 'a' } as any);
+      const raw = await db.u.raw(s => s.get('a'));
+      expect((raw as any).role).toBe('member'); // DB에 실제 저장됨
+      db.close();
+    });
+
+    it('팩토리 default는 레코드마다 호출되어 다른 값을 만든다', async () => {
+      let n = 0;
+      const items = defineStore('i', {
+        id: field.string().primaryKey(),
+        seq: field.number().default(() => ++n),
+      });
+      const db = openDB({ name: 'def-factory', version: 1, stores: [items] as const });
+      await db.waitForReady();
+      await db.i.put({ id: 'a' } as any);
+      await db.i.put({ id: 'b' } as any);
+      const a = await db.i.get('a');
+      const b = await db.i.get('b');
+      expect(a!.seq).not.toBe(b!.seq); // 1 vs 2
+      db.close();
+    });
+
+    it('같은 레코드를 두 번 get해도 default 필드가 동일하다', async () => {
+      const items = defineStore('i2', {
+        id: field.string().primaryKey(),
+        at: field.date().default(() => new Date()),
+      });
+      const db = openDB({ name: 'def-stable', version: 1, stores: [items] as const });
+      await db.waitForReady();
+      await db.i2.put({ id: 'a' } as any);
+      const a1 = await db.i2.get('a');
+      const a2 = await db.i2.get('a');
+      expect((a1!.at as Date).getTime()).toBe((a2!.at as Date).getTime());
+      db.close();
+    });
+  });
+
   describe('기본값 처리', () => {
     it('get()에서 기본값이 적용되어야 함', async () => {
-      // 기본값 없이 저장
-      const rawTx = db.raw.transaction('users', 'readwrite');
-      const store = rawTx.objectStore('users');
-      store.put({ id: 'u1', name: 'Kim', email: 'kim@test.com' });
-      await new Promise<void>(resolve => { rawTx.oncomplete = () => resolve(); });
+      // put()으로 저장 시 default가 주입된다
+      await db.users.put({ id: 'u1', name: 'Kim', email: 'kim@test.com' } as any);
 
-      // StoreAccessor로 조회하면 기본값 적용
       const user = await db.users.get('u1');
       expect(user?.age).toBe(0);
     });
 
     it('getAll()에서 모든 레코드에 기본값이 적용되어야 함', async () => {
-      // 기본값 없이 저장
-      const rawTx = db.raw.transaction('users', 'readwrite');
-      const store = rawTx.objectStore('users');
-      store.put({ id: 'u1', name: 'User 1', email: 'u1@test.com' });
-      store.put({ id: 'u2', name: 'User 2', email: 'u2@test.com' });
-      await new Promise<void>(resolve => { rawTx.oncomplete = () => resolve(); });
+      // put()으로 저장 시 default가 주입된다
+      await db.users.put({ id: 'u1', name: 'User 1', email: 'u1@test.com' } as any);
+      await db.users.put({ id: 'u2', name: 'User 2', email: 'u2@test.com' } as any);
 
       const users = await db.users.getAll();
       expect(users[0].age).toBe(0);

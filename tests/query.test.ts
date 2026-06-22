@@ -316,19 +316,16 @@ describe('Query Builder', () => {
   });
 
   describe('기본값 적용', () => {
-    it('query 결과에 기본값이 적용되어야 함', async () => {
-      // stock 없이 저장
-      const rawTx = db.raw.transaction('products', 'readwrite');
-      const store = rawTx.objectStore('products');
-      store.put({ id: 'p6', name: 'Fig', category: 'fruit', price: 120 });
-      await new Promise<void>(resolve => { rawTx.oncomplete = () => resolve(); });
+    it('put()으로 저장 시 default가 주입되어 query 결과에 반영된다', async () => {
+      // put()으로 저장 — stock 생략 시 default(0)가 주입된다
+      await db.products.put({ id: 'p6', name: 'Fig', category: 'fruit', price: 120 } as any);
 
       const result = await db.products.query()
         .index('name')
         .equals('Fig')
         .find();
 
-      expect(result?.stock).toBe(0); // 기본값
+      expect(result?.stock).toBe(0); // 쓰기 시 주입된 default
     });
   });
 

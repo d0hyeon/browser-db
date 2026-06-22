@@ -185,12 +185,11 @@ class FinalQueryBuilderImpl<T> {
 
   private async executeQuery(): Promise<T[]> {
     const { indexName, range, order, limitCount, offsetCount } = this.state;
-    const hasDefaults = Object.keys(this.defaults).length > 0;
 
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction(this.storeName, 'readonly');
       const store = tx.objectStore(this.storeName);
-      
+
       // offset이나 limit이 있으면 커서 사용
       if (offsetCount > 0 || limitCount !== undefined) {
         const results: T[] = [];
@@ -218,7 +217,7 @@ class FinalQueryBuilderImpl<T> {
           // Collect until limit
           if (limitCount === undefined || collected < limitCount) {
             const value = getCursorValue<T>(cursor);
-            results.push(hasDefaults ? { ...this.defaults, ...value } : value);
+            results.push(value);
             collected++;
           }
 
@@ -238,18 +237,13 @@ class FinalQueryBuilderImpl<T> {
         const request = createGetAllRequest<T>(source, range);
 
         tx.oncomplete = () => {
-          let results = request.result;
-          
-          // Apply defaults
-          if (hasDefaults) {
-            results = results.map(v => ({ ...this.defaults, ...v }));
-          }
-          
+          const results = request.result;
+
           // Apply ordering for getAll (desc needs reverse)
           if (order === 'desc') {
             results.reverse();
           }
-          
+
           resolve(results);
         };
         tx.onerror = () => reject(tx.error);
