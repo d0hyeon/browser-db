@@ -22,6 +22,10 @@ export type PrimaryKeyOptions<T> = T extends number
 // Field Definition Types
 // ============================================================================
 
+export type FieldKind =
+  | 'string' | 'number' | 'boolean' | 'date'
+  | 'object' | 'tuple' | 'enum' | 'nativeEnum' | 'array' | 'custom';
+
 export interface FieldDef<
   T = unknown,
   Optional extends boolean = false,
@@ -39,6 +43,16 @@ export interface FieldDef<
   /** 값 또는 `() => T` 팩토리 함수 */
   _default?: T | (() => T);
   _indexOptions?: IndexOptions;
+  /** 런타임 필드 종류 식별자 */
+  _kind: FieldKind;
+  /** object 필드의 중첩 스키마 */
+  _shape?: Record<string, FieldDef>;
+  /** tuple 필드의 위치별 FieldDef */
+  _items?: FieldDef[];
+  /** enum/nativeEnum 필드의 값 목록 */
+  _enumValues?: readonly (string | number)[];
+  /** array 필드의 원소 FieldDef */
+  _element?: FieldDef;
 }
 
 // ============================================================================
@@ -88,6 +102,19 @@ export interface FieldBuilder<
 // Field Builder Implementation
 // ============================================================================
 
+/** 기본 FieldDef 객체를 생성하는 헬퍼 (각 팩토리가 _kind를 덮어씀) */
+function defaultDef<T>(): FieldDef<T> {
+  return {
+    _type: undefined as T,
+    _optional: false,
+    _hasDefault: false,
+    _isIndexed: false,
+    _autoIncrement: false,
+    _isPrimaryKey: false,
+    _kind: 'custom',
+  };
+}
+
 function createFieldBuilder<
   T,
   Optional extends boolean = false,
@@ -98,14 +125,7 @@ function createFieldBuilder<
 >(
   def?: FieldDef<T, Optional, HasDefault, IsIndexed, AutoIncrement, IsPrimaryKey>
 ): FieldBuilder<T, Optional, HasDefault, IsIndexed, AutoIncrement, IsPrimaryKey> {
-  const resolvedDef = (def ?? {
-    _type: undefined as T,
-    _optional: false,
-    _hasDefault: false,
-    _isIndexed: false,
-    _autoIncrement: false,
-    _isPrimaryKey: false,
-  }) as FieldDef<T, Optional, HasDefault, IsIndexed, AutoIncrement, IsPrimaryKey>;
+  const resolvedDef = (def ?? defaultDef<T>()) as FieldDef<T, Optional, HasDefault, IsIndexed, AutoIncrement, IsPrimaryKey>;
 
   const builder: FieldBuilder<T, Optional, HasDefault, IsIndexed, AutoIncrement, IsPrimaryKey> = {
     _def: resolvedDef,
@@ -133,7 +153,11 @@ function createFieldBuilder<
     },
 
     array(): any {
-      return createFieldBuilder<T[]>();
+      return createFieldBuilder<T[]>({
+        ...defaultDef<T[]>(),
+        _kind: 'array',
+        _element: this._def as unknown as FieldDef,
+      });
     },
   };
 
@@ -230,23 +254,23 @@ type InferTupleType<T extends TupleSchema> = {
  */
 export const field = {
   /** String field */
-  string: () => createFieldBuilder<string>(),
+  string: () => createFieldBuilder<string>({ ...defaultDef<string>(), _kind: 'string' }),
 
   /** Number field (supports autoIncrement for primary key) */
-  number: () => createFieldBuilder<number>(),
+  number: () => createFieldBuilder<number>({ ...defaultDef<number>(), _kind: 'number' }),
 
   /** Boolean field */
-  boolean: () => createFieldBuilder<boolean>(),
+  boolean: () => createFieldBuilder<boolean>({ ...defaultDef<boolean>(), _kind: 'boolean' }),
 
   /** Date field */
-  date: () => createFieldBuilder<Date>(),
+  date: () => createFieldBuilder<Date>({ ...defaultDef<Date>(), _kind: 'date' }),
 
   /**
    * Custom typed field
    * @example
    * field.custom<MyType>()
    */
-  custom: <T>() => createFieldBuilder<T>(),
+  custom: <T>() => createFieldBuilder<T>({ ...defaultDef<T>(), _kind: 'custom' }),
 
   /**
    * Object field with schema definition
@@ -257,7 +281,11 @@ export const field = {
    * })
    */
   object: <S extends ObjectSchema>(shape: S): FieldBuilder<InferObjectType<S>> => {
-    return createFieldBuilder<InferObjectType<S>>();
+    const _shape: Record<string, FieldDef> = {};
+    for (const [k, v] of Object.entries(shape)) {
+      _shape[k] = (v as AnyFieldBuilder)._def as unknown as FieldDef;
+    }
+    return createFieldBuilder<InferObjectType<S>>({ ...defaultDef(), _kind: 'object', _shape });
   },
 
   /**
@@ -266,7 +294,8 @@ export const field = {
    * field.tuple([field.number(), field.number()])  // [number, number]
    */
   tuple: <T extends TupleSchema>(items: T): FieldBuilder<InferTupleType<T>> => {
-    return createFieldBuilder<InferTupleType<T>>();
+    const _items = items.map(i => (i as AnyFieldBuilder)._def as unknown as FieldDef);
+    return createFieldBuilder<InferTupleType<T>>({ ...defaultDef(), _kind: 'tuple', _items });
   },
 
   /**
@@ -277,7 +306,7 @@ export const field = {
   enum: <const T extends readonly string[]>(
     values: T
   ): FieldBuilder<T[number]> => {
-    return createFieldBuilder<T[number]>();
+    return createFieldBuilder<T[number]>({ ...defaultDef(), _kind: 'enum', _enumValues: values });
   },
 
   /**
@@ -289,7 +318,7 @@ export const field = {
   nativeEnum: <T extends Record<string, string | number>>(
     enumObj: T
   ): FieldBuilder<T[keyof T]> => {
-    return createFieldBuilder<T[keyof T]>();
+    return createFieldBuilder<T[keyof T]>({ ...defaultDef(), _kind: 'nativeEnum', _enumValues: Object.values(enumObj) });
   },
 };
 

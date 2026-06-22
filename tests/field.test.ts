@@ -279,4 +279,39 @@ describe('Field Builder', () => {
       expect(f._def._default).toBe(fn); // 함수 참조 그대로, 호출 안 함
     });
   });
+
+  describe('FieldDef 런타임 메타 _kind', () => {
+    it('primitive는 _kind를 보존한다', () => {
+      expect(field.string()._def._kind).toBe('string');
+      expect(field.number()._def._kind).toBe('number');
+      expect(field.boolean()._def._kind).toBe('boolean');
+      expect(field.date()._def._kind).toBe('date');
+    });
+
+    it('enum은 _enumValues를 보존한다', () => {
+      const f = field.enum(['active', 'inactive'] as const);
+      expect(f._def._kind).toBe('enum');
+      expect(f._def._enumValues).toEqual(['active', 'inactive']);
+    });
+
+    it('object는 _shape에 중첩 FieldDef를 보존한다', () => {
+      const f = field.object({ id: field.string(), age: field.number() });
+      expect(f._def._kind).toBe('object');
+      expect(f._def._shape?.id._kind).toBe('string');
+      expect(f._def._shape?.age._kind).toBe('number');
+    });
+
+    it('tuple은 _items에 위치별 FieldDef를 보존한다', () => {
+      const f = field.tuple([field.number(), field.string()]);
+      expect(f._def._kind).toBe('tuple');
+      expect(f._def._items?.[0]._kind).toBe('number');
+      expect(f._def._items?.[1]._kind).toBe('string');
+    });
+
+    it('array()는 _kind=array와 _element를 보존한다', () => {
+      const f = field.string().array();
+      expect(f._def._kind).toBe('array');
+      expect(f._def._element?._kind).toBe('string');
+    });
+  });
 });
