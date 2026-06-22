@@ -354,6 +354,9 @@ type InferTupleType<T extends TupleSchema> = {
  *   
  *   // Native Enum
  *   role: field.nativeEnum(UserRole),
+ *
+ *   // Custom type
+ *   metadata: field.custom<Record<string, unknown>>(),
  * });
  * ```
  */
@@ -369,6 +372,13 @@ export const field = {
 
   /** Date field */
   date: () => createFieldBuilder<Date>(),
+
+  /**
+   * Custom typed field
+   * @example
+   * field.custom<MyType>()
+   */
+  custom: <T>() => createFieldBuilder<T>(),
 
   /**
    * Object field with schema definition
