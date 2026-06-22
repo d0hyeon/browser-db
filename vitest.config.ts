@@ -6,6 +6,11 @@ export default defineConfig({
     environment: 'node',
     setupFiles: ['./tests/setup.ts'],
     include: ['tests/**/*.test.ts'],
+    typecheck: {
+      enabled: true,
+      include: ['tests/**/*.test-d.ts'],
+      tsconfig: './tsconfig.typecheck.json',
+    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
