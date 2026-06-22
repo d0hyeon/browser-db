@@ -10,6 +10,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./resolvers/zod": {
+      "types": "./dist/resolvers/zod/index.d.ts",
+      "import": "./dist/resolvers/zod/index.js"
     }
   },
   "files": [
@@ -41,6 +45,14 @@
     "node": ">=18.0.0"
   },
   "sideEffects": false,
+  "peerDependencies": {
+    "zod": "^3.0.0 || ^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "zod": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "esbuild": "^0.27.2",
     "fake-indexeddb": "^6.2.5",

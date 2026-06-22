@@ -40,21 +40,26 @@ export interface StoreAccessorWithQuery<T, K extends IDBValidKey> extends StoreA
 export function createStoreAccessor<T, K extends IDBValidKey>(
   db: IDBDatabase,
   storeName: string,
-  defaults: Record<string, unknown> = {}
+  defaults: Record<string, unknown> = {},
+  validate?: (record: unknown) => void
 ): StoreAccessorWithQuery<T, K> {
-  const queryFn = createQueryFunction<T, K>(db, storeName, defaults as Partial<T>);
+  const queryFn = createQueryFunction<T, K>(db, storeName, defaults as Partial<T>, validate);
 
   return {
     async get(key: K): Promise<T | undefined> {
       const tx = db.transaction(storeName, 'readonly');
       const store = tx.objectStore(storeName);
-      return getResult<T | undefined>(tx, store.get(key));
+      const result = await getResult<T | undefined>(tx, store.get(key));
+      if (validate && result !== undefined) validate(result);
+      return result;
     },
 
     async getAll(options?: GetAllOptions): Promise<T[]> {
       const tx = db.transaction(storeName, 'readonly');
       const store = tx.objectStore(storeName);
-      return getResult<T[]>(tx, store.getAll(options?.query, options?.count));
+      const result = await getResult<T[]>(tx, store.getAll(options?.query, options?.count));
+      if (validate) result.forEach(validate);
+      return result;
     },
 
     async getBy(
@@ -64,7 +69,9 @@ export function createStoreAccessor<T, K extends IDBValidKey>(
       const tx = db.transaction(storeName, 'readonly');
       const store = tx.objectStore(storeName);
       const index = store.index(indexName);
-      return getResult<T | undefined>(tx, index.get(query));
+      const result = await getResult<T | undefined>(tx, index.get(query));
+      if (validate && result !== undefined) validate(result);
+      return result;
     },
 
     async getAllBy(
@@ -74,7 +81,9 @@ export function createStoreAccessor<T, K extends IDBValidKey>(
       const tx = db.transaction(storeName, 'readonly');
       const store = tx.objectStore(storeName);
       const index = store.index(indexName);
-      return getResult<T[]>(tx, index.getAll(query));
+      const result = await getResult<T[]>(tx, index.getAll(query));
+      if (validate) result.forEach(validate);
+      return result;
     },
 
     async put(value: T, key?: K): Promise<K> {

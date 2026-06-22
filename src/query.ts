@@ -121,7 +121,8 @@ class FinalQueryBuilderImpl<T> {
     private db: IDBDatabase,
     private storeName: string,
     private state: QueryState,
-    private defaults: Partial<T>
+    private defaults: Partial<T>,
+    private validate?: (record: unknown) => void
   ) {}
 
   orderBy(order: SortOrder): FinalQueryBuilderImpl<T> {
@@ -129,7 +130,8 @@ class FinalQueryBuilderImpl<T> {
       this.db,
       this.storeName,
       { ...this.state, order },
-      this.defaults
+      this.defaults,
+      this.validate
     );
   }
 
@@ -138,7 +140,8 @@ class FinalQueryBuilderImpl<T> {
       this.db,
       this.storeName,
       { ...this.state, limitCount: count },
-      this.defaults
+      this.defaults,
+      this.validate
     );
   }
 
@@ -147,7 +150,8 @@ class FinalQueryBuilderImpl<T> {
       this.db,
       this.storeName,
       { ...this.state, offsetCount: count },
-      this.defaults
+      this.defaults,
+      this.validate
     );
   }
 
@@ -160,7 +164,8 @@ class FinalQueryBuilderImpl<T> {
       this.db,
       this.storeName,
       { ...this.state, limitCount: 1 },
-      this.defaults
+      this.defaults,
+      this.validate
     ).executeQuery();
     return results[0];
   }
@@ -203,7 +208,12 @@ class FinalQueryBuilderImpl<T> {
         request.onsuccess = () => {
           const cursor = request.result;
           if (!cursor) {
-            resolve(results);
+            try {
+              if (this.validate) results.forEach(this.validate);
+              resolve(results);
+            } catch (err) {
+              reject(err);
+            }
             return;
           }
 
@@ -223,7 +233,12 @@ class FinalQueryBuilderImpl<T> {
 
           // Check if we have enough
           if (limitCount !== undefined && collected >= limitCount) {
-            resolve(results);
+            try {
+              if (this.validate) results.forEach(this.validate);
+              resolve(results);
+            } catch (err) {
+              reject(err);
+            }
             return;
           }
 
@@ -244,7 +259,12 @@ class FinalQueryBuilderImpl<T> {
             results.reverse();
           }
 
-          resolve(results);
+          try {
+            if (this.validate) results.forEach(this.validate);
+            resolve(results);
+          } catch (err) {
+            reject(err);
+          }
         };
         tx.onerror = () => reject(tx.error);
       }
@@ -258,7 +278,8 @@ class IndexQueryBuilderImpl<T> {
     private storeName: string,
     private indexName: string | undefined,
     private useKey: boolean,
-    private defaults: Partial<T>
+    private defaults: Partial<T>,
+    private validate?: (record: unknown) => void
   ) {}
 
   private createFinal(range?: IDBKeyRange): FinalQueryBuilderImpl<T> {
@@ -272,7 +293,8 @@ class IndexQueryBuilderImpl<T> {
         order: 'asc',
         offsetCount: 0,
       },
-      this.defaults
+      this.defaults,
+      this.validate
     );
   }
 
@@ -330,7 +352,8 @@ class QueryBuilderImpl<T, K> {
   constructor(
     private db: IDBDatabase,
     private storeName: string,
-    private defaults: Partial<T>
+    private defaults: Partial<T>,
+    private validate?: (record: unknown) => void
   ) {}
 
   index(indexName: string): IndexQueryBuilderImpl<T> {
@@ -339,7 +362,8 @@ class QueryBuilderImpl<T, K> {
       this.storeName,
       indexName,
       false,
-      this.defaults
+      this.defaults,
+      this.validate
     );
   }
 
@@ -349,7 +373,8 @@ class QueryBuilderImpl<T, K> {
       this.storeName,
       undefined,
       true,
-      this.defaults
+      this.defaults,
+      this.validate
     );
   }
 
@@ -359,7 +384,8 @@ class QueryBuilderImpl<T, K> {
       this.storeName,
       undefined,
       false,
-      this.defaults
+      this.defaults,
+      this.validate
     ).findAll();
   }
 
@@ -370,7 +396,8 @@ class QueryBuilderImpl<T, K> {
       this.storeName,
       undefined,
       true,
-      this.defaults
+      this.defaults,
+      this.validate
     );
   }
 
@@ -455,7 +482,8 @@ function parseWhereCondition(condition: WhereCondition<unknown> | unknown): IDBK
 export function createQueryFunction<T, K>(
   db: IDBDatabase,
   storeName: string,
-  defaults: Partial<T> = {}
+  defaults: Partial<T> = {},
+  validate?: (record: unknown) => void
 ): {
   (options: QueryOptions): Promise<T[]>;
   (): QueryBuilderImpl<T, K>;
@@ -465,7 +493,7 @@ export function createQueryFunction<T, K>(
   function query(options?: QueryOptions): Promise<T[]> | QueryBuilderImpl<T, K> {
     // Builder 스타일
     if (!options) {
-      return new QueryBuilderImpl<T, K>(db, storeName, defaults);
+      return new QueryBuilderImpl<T, K>(db, storeName, defaults, validate);
     }
 
     // Object 스타일
@@ -485,7 +513,8 @@ export function createQueryFunction<T, K>(
         limitCount: limit,
         offsetCount: offset,
       },
-      defaults
+      defaults,
+      validate
     );
 
     return finalBuilder.findAll();
