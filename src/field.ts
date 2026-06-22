@@ -36,7 +36,8 @@ export interface FieldDef<
   _isIndexed: IsIndexed;
   _autoIncrement: AutoIncrement;
   _isPrimaryKey: IsPrimaryKey;
-  _default?: T;
+  /** 값 또는 `() => T` 팩토리 함수 */
+  _default?: T | (() => T);
   _indexOptions?: IndexOptions;
 }
 
@@ -62,8 +63,8 @@ export interface FieldBuilder<
   /** Mark field as optional (can be undefined) */
   optional(): FieldBuilder<T, true, HasDefault, IsIndexed, AutoIncrement, IsPrimaryKey>;
 
-  /** Set default value */
-  default(value: T): FieldBuilder<T, Optional, true, IsIndexed, AutoIncrement, IsPrimaryKey>;
+  /** Set default value or factory function */
+  default(value: T | (() => T)): FieldBuilder<T, Optional, true, IsIndexed, AutoIncrement, IsPrimaryKey>;
 
   /** Create an index on this field */
   index(options?: IndexOptions): FieldBuilder<T, Optional, HasDefault, true, AutoIncrement, IsPrimaryKey>;
@@ -113,8 +114,8 @@ function createFieldBuilder<
       return createFieldBuilder({ ...this._def, _optional: true as true });
     },
 
-    default(value: T) {
-      return createFieldBuilder({ ...this._def, _hasDefault: true as true, _default: value });
+    default(value: T | (() => T)) {
+      return createFieldBuilder({ ...this._def, _hasDefault: true as true, _default: value as T });
     },
 
     primaryKey(options?: { autoIncrement?: boolean }): any {

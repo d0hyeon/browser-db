@@ -264,4 +264,19 @@ describe('Field Builder', () => {
       expect(f._def._indexOptions?.multiEntry).toBe(true);
     });
   });
+
+  describe('field.default - 값 또는 팩토리', () => {
+    it('값을 default로 보존한다', () => {
+      const f = field.number().default(0);
+      expect(f._def._hasDefault).toBe(true);
+      expect(f._def._default).toBe(0);
+    });
+
+    it('팩토리 함수를 default로 보존한다(평가하지 않음)', () => {
+      const fn = () => new Date();
+      const f = field.date().default(fn);
+      expect(f._def._hasDefault).toBe(true);
+      expect(f._def._default).toBe(fn); // 함수 참조 그대로, 호출 안 함
+    });
+  });
 });
