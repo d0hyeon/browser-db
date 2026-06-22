@@ -19,140 +19,6 @@ export type PrimaryKeyOptions<T> = T extends number
   : Record<string, never>;
 
 // ============================================================================
-// Type Builder (for nested types - no index/primaryKey)
-// ============================================================================
-
-export interface TypeDef<
-  T = unknown,
-  Optional extends boolean = false,
-  HasDefault extends boolean = false
-> {
-  _type: T;
-  _optional: Optional;
-  _hasDefault: HasDefault;
-  _default?: T;
-}
-
-export interface TypeBuilder<
-  T,
-  Optional extends boolean = false,
-  HasDefault extends boolean = false
-> {
-  _def: TypeDef<T, Optional, HasDefault>;
-
-  /** Mark as optional */
-  optional(): TypeBuilder<T, true, HasDefault>;
-
-  /** Set default value */
-  default(value: T): TypeBuilder<T, Optional, true>;
-
-  /** Convert to array */
-  array(): TypeBuilder<T[], Optional, HasDefault>;
-}
-
-function createTypeBuilder<T>(): TypeBuilder<T> {
-  const def: TypeDef<T, false, false> = {
-    _type: undefined as T,
-    _optional: false,
-    _hasDefault: false,
-  };
-
-  const builder: TypeBuilder<T> = {
-    _def: def,
-
-    optional() {
-      return {
-        ...this,
-        _def: { ...this._def, _optional: true },
-      } as unknown as TypeBuilder<T, true, false>;
-    },
-
-    default(value: T) {
-      return {
-        ...this,
-        _def: { ...this._def, _hasDefault: true, _default: value },
-      } as unknown as TypeBuilder<T, false, true>;
-    },
-
-    array() {
-      return createTypeBuilder<T[]>() as unknown as TypeBuilder<T[], false, false>;
-    },
-  };
-
-  return builder;
-}
-
-/** Type factory for nested objects/tuples */
-export interface TypeFactory {
-  string(): TypeBuilder<string>;
-  number(): TypeBuilder<number>;
-  boolean(): TypeBuilder<boolean>;
-  date(): TypeBuilder<Date>;
-  custom<T>(): TypeBuilder<T>;
-  object<S extends ObjectSchema>(schema: (t: TypeFactory) => S): TypeBuilder<InferObjectType<S>>;
-  tuple<T extends TupleSchema>(schema: (t: TypeFactory) => T): TypeBuilder<InferTupleType<T>>;
-  enum<const T extends readonly string[]>(values: T): TypeBuilder<T[number]>;
-  nativeEnum<T extends Record<string, string | number>>(enumObj: T): TypeBuilder<T[keyof T]>;
-}
-
-export const type: TypeFactory = {
-  string: () => createTypeBuilder<string>(),
-  number: () => createTypeBuilder<number>(),
-  boolean: () => createTypeBuilder<boolean>(),
-  date: () => createTypeBuilder<Date>(),
-
-  /** Custom type */
-  custom: <T>() => createTypeBuilder<T>(),
-
-  /**
-   * Nested object type
-   * @example
-   * t.object(t => ({ name: t.string(), age: t.number().optional() }))
-   */
-  object: <S extends ObjectSchema>(
-    schema: (t: TypeFactory) => S
-  ): TypeBuilder<InferObjectType<S>> => {
-    const _shape = schema(type);
-    return createTypeBuilder<InferObjectType<S>>();
-  },
-
-  /**
-   * Nested tuple type
-   * @example
-   * t.tuple(t => [t.number(), t.number()])  // [number, number]
-   */
-  tuple: <T extends TupleSchema>(
-    schema: (t: TypeFactory) => T
-  ): TypeBuilder<InferTupleType<T>> => {
-    const _shape = schema(type);
-    return createTypeBuilder<InferTupleType<T>>();
-  },
-
-  /**
-   * Enum type from string literals
-   * @example
-   * t.enum(['active', 'inactive', 'pending'] as const)
-   */
-  enum: <const T extends readonly string[]>(
-    values: T
-  ): TypeBuilder<T[number]> => {
-    return createTypeBuilder<T[number]>();
-  },
-
-  /**
-   * Native TypeScript enum type
-   * @example
-   * enum Status { Active, Inactive }
-   * t.nativeEnum(Status)
-   */
-  nativeEnum: <T extends Record<string, string | number>>(
-    enumObj: T
-  ): TypeBuilder<T[keyof T]> => {
-    return createTypeBuilder<T[keyof T]>();
-  },
-};
-
-// ============================================================================
 // Field Definition Types
 // ============================================================================
 
@@ -288,18 +154,13 @@ type Prettify<T> = {
 // Infer Object Schema Type
 // ============================================================================
 
-type ObjectSchema = Record<string, TypeBuilder<unknown, boolean, boolean>>;
+/** FieldBuilder 기반 object/tuple 스키마 타입 */
+type AnyFieldBuilder = FieldBuilder<unknown, boolean, boolean, boolean, boolean, boolean>;
+type ObjectSchema = Record<string, AnyFieldBuilder>;
+type TupleSchema = readonly AnyFieldBuilder[];
 
-// Required keys in object schema
-type ObjectRequiredKeys<S extends ObjectSchema> = {
-  [K in keyof S]: S[K] extends TypeBuilder<unknown, false, false> ? K : never;
-}[keyof S];
-
-// Optional keys in object schema
-type ObjectOptionalKeys<S extends ObjectSchema> = Exclude<keyof S, ObjectRequiredKeys<S>>;
-
-// Infer type from TypeBuilder
-type InferTypeBuilderType<T> = T extends TypeBuilder<infer U, infer Optional, infer HasDefault>
+/** FieldBuilder에서 타입 추출 (_optional/_hasDefault 규칙 유지) */
+type InferFieldBuilderType<T> = T extends FieldBuilder<infer U, infer Optional, infer HasDefault, boolean, boolean, boolean>
   ? HasDefault extends true
     ? U
     : Optional extends true
@@ -307,19 +168,25 @@ type InferTypeBuilderType<T> = T extends TypeBuilder<infer U, infer Optional, in
       : U
   : never;
 
+// Required keys: _optional=false, _hasDefault=false
+type ObjectRequiredKeys<S extends ObjectSchema> = {
+  [K in keyof S]: S[K] extends FieldBuilder<unknown, false, false, boolean, boolean, boolean> ? K : never;
+}[keyof S];
+
+// Optional keys
+type ObjectOptionalKeys<S extends ObjectSchema> = Exclude<keyof S, ObjectRequiredKeys<S>>;
+
 type InferObjectType<S extends ObjectSchema> = Prettify<
-  { [K in ObjectRequiredKeys<S>]: InferTypeBuilderType<S[K]> } &
-  { [K in ObjectOptionalKeys<S>]?: InferTypeBuilderType<S[K]> }
+  { [K in ObjectRequiredKeys<S>]: InferFieldBuilderType<S[K]> } &
+  { [K in ObjectOptionalKeys<S>]?: InferFieldBuilderType<S[K]> }
 >;
 
 // ============================================================================
 // Infer Tuple Type
 // ============================================================================
 
-type TupleSchema = readonly TypeBuilder<unknown, boolean, boolean>[];
-
 type InferTupleType<T extends TupleSchema> = {
-  [K in keyof T]: T[K] extends TypeBuilder<infer U, boolean, boolean> ? U : never;
+  [K in keyof T]: T[K] extends FieldBuilder<infer U, boolean, boolean, boolean, boolean, boolean> ? U : never;
 };
 
 // ============================================================================
@@ -383,28 +250,21 @@ export const field = {
   /**
    * Object field with schema definition
    * @example
-   * field.object(t => ({
-   *   name: t.string(),
-   *   age: t.number().optional(),
-   * }))
+   * field.object({
+   *   name: field.string(),
+   *   age: field.number().optional(),
+   * })
    */
-  object: <S extends ObjectSchema>(
-    schema: (t: TypeFactory) => S
-  ): FieldBuilder<InferObjectType<S>> => {
-    // Execute schema function to get the shape (for runtime validation if needed)
-    const _shape = schema(type);
+  object: <S extends ObjectSchema>(shape: S): FieldBuilder<InferObjectType<S>> => {
     return createFieldBuilder<InferObjectType<S>>();
   },
 
   /**
    * Tuple field
    * @example
-   * field.tuple(t => [t.number(), t.number()])  // [number, number]
+   * field.tuple([field.number(), field.number()])  // [number, number]
    */
-  tuple: <T extends TupleSchema>(
-    schema: (t: TypeFactory) => T
-  ): FieldBuilder<InferTupleType<T>> => {
-    const _shape = schema(type);
+  tuple: <T extends TupleSchema>(items: T): FieldBuilder<InferTupleType<T>> => {
     return createFieldBuilder<InferTupleType<T>>();
   },
 

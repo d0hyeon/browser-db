@@ -23,17 +23,17 @@ const usersStore = defineStore('users', {
   age: field.number().optional().default(0).index(),
   
   // Object with schema (Zod style)
-  address: field.object(t => ({
-    detail: t.string(),
-    post: t.string(),
-    zipCode: t.number().optional(),
-  })).optional().default({ detail: '', post: '' }),
-  
+  address: field.object({
+    detail: field.string(),
+    post: field.string(),
+    zipCode: field.number().optional(),
+  }).optional().default({ detail: '', post: '' }),
+
   // Array (Zod style: .array() at the end)
   tags: field.string().array().optional(),
-  
+
   // Tuple
-  coordinate: field.tuple(t => [t.number(), t.number()]).optional(),
+  coordinate: field.tuple([field.number(), field.number()]).optional(),
   
   // Enum
   status: field.enum(['active', 'inactive', 'pending'] as const).default('active'),

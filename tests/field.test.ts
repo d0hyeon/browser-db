@@ -140,30 +140,30 @@ describe('Field Builder', () => {
 
   describe('복합 타입 - object()', () => {
     it('field.object()는 중첩 스키마를 지원해야 함', () => {
-      const f = field.object(t => ({
-        name: t.string(),
-        age: t.number().optional(),
-      }));
+      const f = field.object({
+        name: field.string(),
+        age: field.number().optional(),
+      });
 
       expect(f._def._optional).toBe(false);
       expect(f._def._hasDefault).toBe(false);
     });
 
     it('field.object()에 default를 설정할 수 있어야 함', () => {
-      const f = field.object(t => ({
-        name: t.string(),
-        age: t.number(),
-      })).default({ name: '', age: 0 });
+      const f = field.object({
+        name: field.string(),
+        age: field.number(),
+      }).default({ name: '', age: 0 });
 
       expect(f._def._hasDefault).toBe(true);
       expect(f._def._default).toEqual({ name: '', age: 0 });
     });
 
     it('field.object()를 optional로 만들 수 있어야 함', () => {
-      const f = field.object(t => ({
-        city: t.string(),
-        zipCode: t.string(),
-      })).optional();
+      const f = field.object({
+        city: field.string(),
+        zipCode: field.string(),
+      }).optional();
 
       expect(f._def._optional).toBe(true);
     });
@@ -171,12 +171,12 @@ describe('Field Builder', () => {
 
   describe('복합 타입 - tuple()', () => {
     it('field.tuple()은 튜플 타입을 생성해야 함', () => {
-      const f = field.tuple(t => [t.number(), t.number()]);
+      const f = field.tuple([field.number(), field.number()]);
       expect(f._def._optional).toBe(false);
     });
 
     it('field.tuple()에 optional을 적용할 수 있어야 함', () => {
-      const f = field.tuple(t => [t.string(), t.number()]).optional();
+      const f = field.tuple([field.string(), field.number()]).optional();
       expect(f._def._optional).toBe(true);
     });
   });
@@ -214,6 +214,31 @@ describe('Field Builder', () => {
       const f = field.nativeEnum(Role).default(Role.User);
       expect(f._def._hasDefault).toBe(true);
       expect(f._def._default).toBe(Role.User);
+    });
+  });
+
+  describe('field.object - 객체 직접(콜백 없음)', () => {
+    it('객체를 직접 받아 object 필드를 생성한다', () => {
+      const f = field.object({
+        detail: field.string(),
+        zip: field.number().optional(),
+      });
+      expect(f._def._optional).toBe(false);
+      expect(f._def._isPrimaryKey).toBe(false);
+    });
+
+    it('object는 중첩될 수 있다', () => {
+      const f = field.object({
+        inner: field.object({ id: field.string() }),
+      });
+      expect(f._def._optional).toBe(false);
+    });
+  });
+
+  describe('field.tuple - 배열 직접(콜백 없음)', () => {
+    it('배열을 직접 받아 tuple 필드를 생성한다', () => {
+      const f = field.tuple([field.number(), field.number()]);
+      expect(f._def._optional).toBe(false);
     });
   });
 

@@ -7,12 +7,15 @@ import './App.css'
 // =============================================================================
 // Schema Definition
 // =============================================================================
-
+const Status = ['A', 'B'] as const;
 const todosStore = defineStore('todos', {
   id: field.string().primaryKey(),
   title: field.string(),
   completed: field.boolean().index().default(false),
-  createdAt: field.date().default(new Date()),
+  createdAt: field.number().default(Date.now()),
+  data: field.object({
+    name: field.string().array(),
+  }).optional()
 })
 
 type Todo = InferStore<typeof todosStore>
@@ -50,7 +53,11 @@ function TodoApp() {
   // Query
   const { data: todos = [], isLoading } = useQuery({
     queryKey: ['todos'],
-    queryFn: () => db.todos.getAll(),
+    queryFn: async () => {
+      const data = await db.todos.getAll()
+      console.log('??', data);
+      return data;
+    },
   })
   const { data: count } = useQuery({
     queryKey: ['todos', 'completed', 'count'],
@@ -69,30 +76,30 @@ function TodoApp() {
       await db.todos.add({ id: crypto.randomUUID(), title })
       console.log('끝남')
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['todos'] }),
+    onSuccess: () => queryClient.refetchQueries({ queryKey: ['todos'] }),
   })
 
   const toggleTodo = useMutation({
     mutationFn: (todo: Todo) =>
       db.todos.put({ ...todo, completed: !todo.completed }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['todos'] }),
+    onSuccess: () => queryClient.refetchQueries({ queryKey: ['todos'] }),
   })
 
   const deleteTodo = useMutation({
     mutationFn: (id: string) => db.todos.delete(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['todos'] }),
+    onSuccess: () => queryClient.refetchQueries({ queryKey: ['todos'] }),
   })
 
 
   const clear = useMutation({
     mutationFn: async () => {
-      const transaction = db.startTransaction(['todos'], { mode: 'readwrite' });
+      const transaction = db.startTransaction(['todos']);
       for (const todo of todos) {
         transaction.todos.put({ ...todo, completed: true });
       }
       await transaction.commit();
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['todos'] }),
+    onSuccess: () => queryClient.refetchQueries({ queryKey: ['todos'] }),
   });
 
 
