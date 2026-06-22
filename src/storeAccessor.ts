@@ -43,7 +43,7 @@ export function createStoreAccessor<T, K extends IDBValidKey>(
   defaults: Record<string, unknown> = {},
   validate?: (record: unknown) => void
 ): StoreAccessorWithQuery<T, K> {
-  const queryFn = createQueryFunction<T, K>(db, storeName, defaults as Partial<T>, validate);
+  const queryFn = createQueryFunction<T, K>(db, storeName, validate);
 
   return {
     async get(key: K): Promise<T | undefined> {
