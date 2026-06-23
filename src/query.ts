@@ -121,7 +121,7 @@ class FinalQueryBuilderImpl<T> {
     private db: IDBDatabase,
     private storeName: string,
     private state: QueryState,
-    private defaults: Partial<T>
+    private validate?: (record: unknown) => void
   ) {}
 
   orderBy(order: SortOrder): FinalQueryBuilderImpl<T> {
@@ -129,7 +129,7 @@ class FinalQueryBuilderImpl<T> {
       this.db,
       this.storeName,
       { ...this.state, order },
-      this.defaults
+      this.validate
     );
   }
 
@@ -138,7 +138,7 @@ class FinalQueryBuilderImpl<T> {
       this.db,
       this.storeName,
       { ...this.state, limitCount: count },
-      this.defaults
+      this.validate
     );
   }
 
@@ -147,7 +147,7 @@ class FinalQueryBuilderImpl<T> {
       this.db,
       this.storeName,
       { ...this.state, offsetCount: count },
-      this.defaults
+      this.validate
     );
   }
 
@@ -160,7 +160,7 @@ class FinalQueryBuilderImpl<T> {
       this.db,
       this.storeName,
       { ...this.state, limitCount: 1 },
-      this.defaults
+      this.validate
     ).executeQuery();
     return results[0];
   }
@@ -185,12 +185,11 @@ class FinalQueryBuilderImpl<T> {
 
   private async executeQuery(): Promise<T[]> {
     const { indexName, range, order, limitCount, offsetCount } = this.state;
-    const hasDefaults = Object.keys(this.defaults).length > 0;
 
     return new Promise((resolve, reject) => {
       const tx = this.db.transaction(this.storeName, 'readonly');
       const store = tx.objectStore(this.storeName);
-      
+
       // offset이나 limit이 있으면 커서 사용
       if (offsetCount > 0 || limitCount !== undefined) {
         const results: T[] = [];
@@ -204,7 +203,12 @@ class FinalQueryBuilderImpl<T> {
         request.onsuccess = () => {
           const cursor = request.result;
           if (!cursor) {
-            resolve(results);
+            try {
+              if (this.validate) results.forEach(this.validate);
+              resolve(results);
+            } catch (err) {
+              reject(err);
+            }
             return;
           }
 
@@ -218,13 +222,18 @@ class FinalQueryBuilderImpl<T> {
           // Collect until limit
           if (limitCount === undefined || collected < limitCount) {
             const value = getCursorValue<T>(cursor);
-            results.push(hasDefaults ? { ...this.defaults, ...value } : value);
+            results.push(value);
             collected++;
           }
 
           // Check if we have enough
           if (limitCount !== undefined && collected >= limitCount) {
-            resolve(results);
+            try {
+              if (this.validate) results.forEach(this.validate);
+              resolve(results);
+            } catch (err) {
+              reject(err);
+            }
             return;
           }
 
@@ -238,19 +247,19 @@ class FinalQueryBuilderImpl<T> {
         const request = createGetAllRequest<T>(source, range);
 
         tx.oncomplete = () => {
-          let results = request.result;
-          
-          // Apply defaults
-          if (hasDefaults) {
-            results = results.map(v => ({ ...this.defaults, ...v }));
-          }
-          
+          const results = request.result;
+
           // Apply ordering for getAll (desc needs reverse)
           if (order === 'desc') {
             results.reverse();
           }
-          
-          resolve(results);
+
+          try {
+            if (this.validate) results.forEach(this.validate);
+            resolve(results);
+          } catch (err) {
+            reject(err);
+          }
         };
         tx.onerror = () => reject(tx.error);
       }
@@ -264,7 +273,7 @@ class IndexQueryBuilderImpl<T> {
     private storeName: string,
     private indexName: string | undefined,
     private useKey: boolean,
-    private defaults: Partial<T>
+    private validate?: (record: unknown) => void
   ) {}
 
   private createFinal(range?: IDBKeyRange): FinalQueryBuilderImpl<T> {
@@ -278,7 +287,7 @@ class IndexQueryBuilderImpl<T> {
         order: 'asc',
         offsetCount: 0,
       },
-      this.defaults
+      this.validate
     );
   }
 
@@ -336,7 +345,7 @@ class QueryBuilderImpl<T, K> {
   constructor(
     private db: IDBDatabase,
     private storeName: string,
-    private defaults: Partial<T>
+    private validate?: (record: unknown) => void
   ) {}
 
   index(indexName: string): IndexQueryBuilderImpl<T> {
@@ -345,7 +354,7 @@ class QueryBuilderImpl<T, K> {
       this.storeName,
       indexName,
       false,
-      this.defaults
+      this.validate
     );
   }
 
@@ -355,7 +364,7 @@ class QueryBuilderImpl<T, K> {
       this.storeName,
       undefined,
       true,
-      this.defaults
+      this.validate
     );
   }
 
@@ -365,7 +374,7 @@ class QueryBuilderImpl<T, K> {
       this.storeName,
       undefined,
       false,
-      this.defaults
+      this.validate
     ).findAll();
   }
 
@@ -376,7 +385,7 @@ class QueryBuilderImpl<T, K> {
       this.storeName,
       undefined,
       true,
-      this.defaults
+      this.validate
     );
   }
 
@@ -461,7 +470,7 @@ function parseWhereCondition(condition: WhereCondition<unknown> | unknown): IDBK
 export function createQueryFunction<T, K>(
   db: IDBDatabase,
   storeName: string,
-  defaults: Partial<T> = {}
+  validate?: (record: unknown) => void
 ): {
   (options: QueryOptions): Promise<T[]>;
   (): QueryBuilderImpl<T, K>;
@@ -471,7 +480,7 @@ export function createQueryFunction<T, K>(
   function query(options?: QueryOptions): Promise<T[]> | QueryBuilderImpl<T, K> {
     // Builder 스타일
     if (!options) {
-      return new QueryBuilderImpl<T, K>(db, storeName, defaults);
+      return new QueryBuilderImpl<T, K>(db, storeName, validate);
     }
 
     // Object 스타일
@@ -491,7 +500,7 @@ export function createQueryFunction<T, K>(
         limitCount: limit,
         offsetCount: offset,
       },
-      defaults
+      validate
     );
 
     return finalBuilder.findAll();
@@ -530,7 +539,9 @@ export interface TypedQueryBuilder<T, K, S extends StoreSchema> {
   key(): IndexQueryBuilder<T>;
   /** Get all records */
   findAll(): Promise<T[]>;
-  
+  /** Get first matching record */
+  find(): Promise<T | undefined>;
+
   // Direct condition methods (no index, uses key-based cursor scan)
   equals(value: K): FinalQueryBuilder<T>;
   gt(value: K): FinalQueryBuilder<T>;

@@ -60,6 +60,8 @@ export interface SchemaStoreAccessor<S extends StoreSchema> {
   clear(): Promise<void>;
   count(query?: IDBKeyRange | IDBValidKey): Promise<number>;
 
+  raw<R>(fn: (store: IDBObjectStore) => IDBRequest<R>): Promise<R>;
+
   // Query API (type-safe)
   query(options: TypedQueryOptions<S>): Promise<InferOutput<S>[]>;
   query(): TypedQueryBuilder<InferOutput<S>, PrimaryKeyType<S>, S>;
@@ -139,13 +141,24 @@ interface DatabaseState<TStores extends readonly AnySchemaStore[]> {
 }
 
 /**
+ * store의 resolvers로 validate 함수를 한 번 생성한다.
+ * resolver가 없으면 undefined 반환.
+ */
+function buildValidate(store: AnySchemaStore): ((r: unknown) => void) | undefined {
+  if (!store.resolvers?.length) return undefined;
+  const validators = store.resolvers.map(r => r.createValidator(store));
+  return (record) => { for (const v of validators) v(record); };
+}
+
+/**
  * Create a store accessor proxy that auto-waits for ready state
  */
 function createLazyStoreAccessor<TStores extends readonly AnySchemaStore[]>(
   state: DatabaseState<TStores>,
   storeName: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  defaults: any
+  defaults: any,
+  validate?: (record: unknown) => void
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): any {
   // Helper to get the real accessor after ready
@@ -154,7 +167,7 @@ function createLazyStoreAccessor<TStores extends readonly AnySchemaStore[]>(
     if (!state.idb) {
       throw new Error('Database initialization failed');
     }
-    return createStoreAccessor(state.idb, storeName, defaults);
+    return createStoreAccessor(state.idb, storeName, defaults, validate);
   };
 
   // Create a proxy that wraps all methods
@@ -169,7 +182,7 @@ function createLazyStoreAccessor<TStores extends readonly AnySchemaStore[]>(
             return getAccessor().then(accessor => accessor.query(options));
           }
           // Return lazy query builder proxy
-          return createLazyQueryBuilder(state, storeName, defaults);
+          return createLazyQueryBuilder(state, storeName, defaults, validate);
         };
       }
 
@@ -191,7 +204,8 @@ function createLazyQueryBuilder<TStores extends readonly AnySchemaStore[]>(
   state: DatabaseState<TStores>,
   storeName: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  defaults: any
+  defaults: any,
+  validate?: (record: unknown) => void
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): any {
   const getQueryBuilder = async () => {
@@ -199,7 +213,7 @@ function createLazyQueryBuilder<TStores extends readonly AnySchemaStore[]>(
     if (!state.idb) {
       throw new Error('Database initialization failed');
     }
-    return createStoreAccessor(state.idb, storeName, defaults).query();
+    return createStoreAccessor(state.idb, storeName, defaults, validate).query();
   };
 
   // Create a proxy that wraps the query builder
@@ -271,9 +285,10 @@ function buildSchemaDatabase<TStores extends readonly AnySchemaStore[]>(
 
   // Add store accessors with auto-wait behavior
   for (const store of state.stores) {
+    const validate = buildValidate(store);
     Object.defineProperty(database, store.name, {
       get() {
-        return createLazyStoreAccessor(state, store.name, store.defaults);
+        return createLazyStoreAccessor(state, store.name, store.defaults, validate);
       },
       enumerable: true,
     });

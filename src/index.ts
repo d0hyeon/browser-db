@@ -2,6 +2,9 @@ export { defineStore } from './schema';
 export { openDB } from './createSchemaDB';
 export { field } from './field';
 
+// Resolver types
+export type { StoreResolver } from './resolver';
+
 // Field types
 export type { InferStore } from './field';
 

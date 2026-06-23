@@ -5,7 +5,7 @@
  *
  * db.startTransaction(storeNames, options?):
  * - storeNames: 트랜잭션에 포함할 스토어 이름 배열
- * - options.mode: 'readonly' | 'readwrite' (기본: 'readonly')
+ * - options.mode: 'write' (트랜잭션은 쓰기 전용 — 읽기는 db.store.get() 사용)
  * - options.durability: 'default' | 'strict' | 'relaxed' (기본: 'default')
  *
  * Transaction 객체:
@@ -76,7 +76,7 @@ describe('Transaction', () => {
 
   describe('startTransaction()', () => {
     it('트랜잭션을 시작할 수 있어야 함', async () => {
-      const tx = db.startTransaction(['accounts'], { mode: 'readonly' });
+      const tx = db.startTransaction(['accounts'], { mode: 'write' });
 
       expect(tx).toBeDefined();
       expect(typeof tx.commit).toBe('function');
@@ -87,7 +87,7 @@ describe('Transaction', () => {
 
     it('여러 스토어를 포함하는 트랜잭션을 시작할 수 있어야 함', async () => {
       const tx = db.startTransaction(['accounts', 'transactions'], {
-        mode: 'readwrite',
+        mode: 'write',
       });
 
       expect(tx.accounts).toBeDefined();
@@ -99,7 +99,7 @@ describe('Transaction', () => {
 
   describe('트랜잭션 작업', () => {
     it('트랜잭션 내에서 put 작업을 수행할 수 있어야 함', async () => {
-      const tx = db.startTransaction(['accounts'], { mode: 'readwrite' });
+      const tx = db.startTransaction(['accounts'], { mode: 'write' });
 
       tx.accounts.put({ id: 'acc3', name: 'Account 3', balance: 200 });
 
@@ -111,7 +111,7 @@ describe('Transaction', () => {
     });
 
     it('트랜잭션 내에서 여러 작업을 수행할 수 있어야 함', async () => {
-      const tx = db.startTransaction(['accounts'], { mode: 'readwrite' });
+      const tx = db.startTransaction(['accounts'], { mode: 'write' });
 
       tx.accounts.put({ id: 'acc3', name: 'Account 3', balance: 300 });
       tx.accounts.put({ id: 'acc4', name: 'Account 4', balance: 400 });
@@ -130,7 +130,7 @@ describe('Transaction', () => {
 
     it('여러 스토어에 걸친 작업을 수행할 수 있어야 함', async () => {
       const tx = db.startTransaction(['accounts', 'transactions'], {
-        mode: 'readwrite',
+        mode: 'write',
       });
 
       // 계좌 잔액 업데이트
@@ -160,7 +160,7 @@ describe('Transaction', () => {
 
   describe('commit()', () => {
     it('commit()은 모든 작업을 원자적으로 완료해야 함', async () => {
-      const tx = db.startTransaction(['accounts'], { mode: 'readwrite' });
+      const tx = db.startTransaction(['accounts']);
 
       tx.accounts.put({ id: 'new1', name: 'New 1', balance: 100 });
       tx.accounts.put({ id: 'new2', name: 'New 2', balance: 200 });
@@ -174,7 +174,7 @@ describe('Transaction', () => {
 
   describe('abort()', () => {
     it('abort()는 모든 작업을 롤백해야 함', async () => {
-      const tx = db.startTransaction(['accounts'], { mode: 'readwrite' });
+      const tx = db.startTransaction(['accounts'], { mode: 'write' });
 
       tx.accounts.put({ id: 'temp', name: 'Temporary', balance: 999 });
       tx.accounts.delete('acc1');
@@ -195,7 +195,7 @@ describe('Transaction', () => {
 
   describe('clear()', () => {
     it('트랜잭션 내에서 clear를 수행할 수 있어야 함', async () => {
-      const tx = db.startTransaction(['accounts'], { mode: 'readwrite' });
+      const tx = db.startTransaction(['accounts'], { mode: 'write' });
 
       tx.accounts.clear();
 
@@ -218,8 +218,9 @@ describe('Transaction', () => {
       const transferAmount = 100;
 
       const tx = db.startTransaction(['accounts', 'transactions'], {
-        mode: 'readwrite',
+        mode: 'write',
       });
+
 
       // 이체 처리
       tx.accounts.put({
@@ -253,7 +254,7 @@ describe('Transaction', () => {
     });
 
     it('배치 삽입 시나리오', async () => {
-      const tx = db.startTransaction(['accounts'], { mode: 'readwrite' });
+      const tx = db.startTransaction(['accounts'], { mode: 'write' });
 
       // 여러 계좌 일괄 생성
       for (let i = 3; i <= 10; i++) {

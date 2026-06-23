@@ -23,9 +23,10 @@ IndexedDB is a capable but low-level API. schema-idb adds a thin structure layer
 
 - **End-to-end type safety** — Schema, queries, and results are all inferred from a single definition.
 - **Schema-first design** — Define your data model explicitly. The database follows your schema.
-- **Safe schema evolution** — Add fields with defaults. Existing records receive them on read.
+- **Write-time defaults** — Default values (and factory functions) are injected when records are written, so they persist in the database.
 - **Predictable queries** — Type-safe, index-backed queries that map directly to IndexedDB capabilities.
-- **Zero dependencies** — Small footprint, designed for long-lived applications.
+- **Opt-in runtime validation** — Validate records on read against your schema via a resolver (e.g. Zod), to catch data left invalid by a missed migration.
+- **Zero core dependencies** — The core ships with no dependencies. Validation resolvers are separate entry points; their validator (e.g. Zod) is an optional peer dependency you only pay for if you use it.
 
 ---
 
@@ -73,7 +74,7 @@ await db.users.put({ id: "u1", name: "Kim", email: "kim@example.com" });
 
 // Read
 const user = await db.users.get("u1");
-console.log(user?.age); // 0 (default applied)
+console.log(user?.age); // 0 (default injected at write time)
 
 // Query
 const adults = await db.users.query({
@@ -98,12 +99,12 @@ field.number(); // number
 field.boolean(); // boolean
 field.date(); // Date
 field.string().array(); // string[]
-field.object((t) => ({
-  // nested object
-  street: t.string(),
-  city: t.string(),
-}));
-field.tuple((t) => [t.number(), t.number()]); // [number, number]
+field.object({
+  // nested object — fields composed with the same `field` builder
+  street: field.string(),
+  city: field.string(),
+});
+field.tuple([field.number(), field.number()]); // [number, number]
 field.enum(["active", "inactive"] as const); // union type
 ```
 
@@ -149,10 +150,10 @@ const usersStore = defineStore("users", {
   role: field.enum(["admin", "user"] as const).default("user"),
   tags: field.string().array().optional(),
   profile: field
-    .object((t) => ({
-      bio: t.string().optional(),
-      avatar: t.string().optional(),
-    }))
+    .object({
+      bio: field.string().optional(),
+      avatar: field.string().optional(),
+    })
     .optional(),
   createdAt: field
     .date()
@@ -160,6 +161,52 @@ const usersStore = defineStore("users", {
     .default(() => new Date()),
 });
 ```
+
+---
+
+## Runtime Validation
+
+TypeScript checks your code, but it can't check data that already lives in the
+database — especially records left behind by a **missed migration** after a
+schema change. Runtime validation closes that gap by validating records **on
+read** against your current schema.
+
+Validation is **opt-in** and lives in a separate entry point, so the core stays
+dependency-free. The `resolvers/zod` resolver builds a Zod schema automatically
+from your field definitions — you define your schema once.
+
+```ts
+import { defineStore, field, openDB } from "schema-idb";
+import { zodResolver } from "schema-idb/resolvers/zod";
+
+const usersStore = defineStore("users", {
+  id: field.string().primaryKey(),
+  name: field.string(),
+  age: field.number(),
+}).use(zodResolver()); // validate records on read
+
+const db = openDB({
+  name: "MyApp",
+  versionStrategy: "auto",
+  stores: [usersStore] as const,
+});
+
+// A record missing `age` (e.g. written before the field existed, or via raw)
+// throws when read, surfacing the migration gap instead of silently returning bad data.
+await db.users.get("legacy-id"); // throws if the record fails validation
+```
+
+`zod` is an **optional peer dependency**. Install it only if you use the resolver:
+
+```bash
+npm install zod
+```
+
+**How it behaves**
+
+- Validation runs on `get`, `getAll`, `getBy`, `getAllBy`, and `query`. Writes are not validated (the input is already typed).
+- A field is validated as **required** unless it is `optional()`. A `default()` does not make a field optional for validation — since defaults are injected on write, a missing default field signals a migration gap and fails validation.
+- If you don't call `.use(...)`, there is no validation overhead and no Zod in your bundle.
 
 ---
 
@@ -276,7 +323,8 @@ Migrations are identified by name and run in alphabetical order. Applied migrati
 
 ## Schema Evolution
 
-Add fields without rewriting existing data.
+Add fields over time. Defaults are injected at **write time** — when a record is
+created or updated via `put`/`add` — so they persist in the database.
 
 ```ts
 // Original
@@ -292,11 +340,21 @@ const usersStore = defineStore("users", {
   role: field.string().optional().default("user"),
 });
 
-const user = await db.users.get("existing-id");
-console.log(user?.role); // 'user'
+// New records get the default on write
+await db.users.put({ id: "u1", name: "Kim" });
+const fresh = await db.users.get("u1");
+console.log(fresh?.role); // 'user'
 ```
 
-Defaults are applied on read, keeping migrations cheap and predictable.
+> **Records written before the field existed do not gain the default on read.**
+> Because defaults are injected on write (not on read), older records keep
+> whatever they were stored with. To backfill existing rows, use a migration —
+> and consider a [validation resolver](#runtime-validation) to catch records
+> that no longer match the current schema.
+
+Output types reflect this: an `optional()` field is always `T | undefined` on
+read, even with a default, since a missing field can legitimately read back as
+`undefined` (e.g. from older records or raw writes).
 
 ---
 
@@ -863,6 +921,28 @@ addMigration(
 
 Migrations run during version upgrades in alphabetical order by name.
 
+#### use
+
+```ts
+use(resolver: StoreResolver): this
+```
+
+| Param | Type | Description |
+| ----- | ---- | ----------- |
+| `resolver` | `StoreResolver` | A validation resolver, e.g. `zodResolver()` from `schema-idb/resolvers/zod` |
+
+Attaches a runtime validation resolver to the store. Records are validated on
+read; validation failures throw. Returns the builder for chaining. See
+[Runtime Validation](#runtime-validation).
+
+```ts
+import { zodResolver } from "schema-idb/resolvers/zod";
+
+const usersStore = defineStore("users", {
+  /* ... */
+}).use(zodResolver());
+```
+
 ### field
 
 Field type builders for schema definition.
@@ -902,37 +982,37 @@ Creates a Date field.
 #### field.object
 
 ```ts
-field.object<S>(schema: (t: TypeFactory) => S): FieldBuilder<InferObjectType<S>>
+field.object<S>(shape: S): FieldBuilder<InferObjectType<S>>
 ```
 
 | Param | Type | Description |
 | ----- | ---- | ----------- |
-| `schema` | `(t: TypeFactory) => S` | Function returning an object schema using type builders |
+| `shape` | `S` | Object mapping keys to `field` builders |
 
-Creates a nested object field.
+Creates a nested object field. Nested fields use the same `field` builder, and objects can be nested arbitrarily deep.
 
 ```ts
-field.object(t => ({
-  street: t.string(),
-  city: t.string(),
-  zipCode: t.number().optional(),
-}))
+field.object({
+  street: field.string(),
+  city: field.string(),
+  zipCode: field.number().optional(),
+})
 ```
 
 #### field.tuple
 
 ```ts
-field.tuple<T>(schema: (t: TypeFactory) => T): FieldBuilder<InferTupleType<T>>
+field.tuple<T>(items: T): FieldBuilder<InferTupleType<T>>
 ```
 
 | Param | Type | Description |
 | ----- | ---- | ----------- |
-| `schema` | `(t: TypeFactory) => T` | Function returning a tuple schema as array |
+| `items` | `T` | Array of `field` builders, one per tuple position |
 
-Creates a fixed-length tuple field.
+Creates a fixed-length tuple field. Positional types are preserved.
 
 ```ts
-field.tuple(t => [t.number(), t.number()])  // [number, number]
+field.tuple([field.number(), field.number()])  // [number, number]
 ```
 
 #### field.enum
@@ -1011,12 +1091,19 @@ default(value: T | (() => T)): FieldBuilder
 | ----- | ---- | ----------- |
 | `value` | `T \| (() => T)` | Default value or factory function |
 
-Sets a default value applied on read when the field is missing. Factory functions are called for each read.
+Sets a default that is injected at **write time** (`put`/`add`) when the field is
+omitted from the input, so the value persists in the database. A factory function
+is called once per write — e.g. `() => new Date()` produces a distinct timestamp
+per record.
 
 ```ts
 field.number().default(0)
 field.date().default(() => new Date())
 ```
+
+> A `default()` does **not** make an `optional()` field non-nullable on read:
+> the field can still be `undefined` (older records, raw writes), so the inferred
+> output type stays `T | undefined`.
 
 #### array
 
@@ -1070,7 +1157,11 @@ const usersStore = defineStore("users", {
 });
 
 type User = InferStore<typeof usersStore>;
-// { id: string; name: string; age: number }
+// { id: string; name: string; age: number | undefined }
+//
+// `age` is `number | undefined`, not `number`: it is `optional()`, so even with
+// a default it may read back as `undefined` (older records / raw writes).
+// Defaults are injected on write, not guaranteed on read.
 ```
 
 ---

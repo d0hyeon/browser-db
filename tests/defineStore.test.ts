@@ -89,7 +89,7 @@ describe('defineStore', () => {
         email: field.string().index({ unique: true }),
       });
 
-      expect(store.indexes[0].unique).toBe(true);
+      expect(store.indexes[0]!.unique).toBe(true);
     });
 
     it('multiEntry 인덱스를 생성할 수 있어야 함', () => {
@@ -98,7 +98,7 @@ describe('defineStore', () => {
         tags: field.string().array().index({ multiEntry: true }),
       });
 
-      expect(store.indexes[0].multiEntry).toBe(true);
+      expect(store.indexes[0]!.multiEntry).toBe(true);
     });
 
     it('여러 인덱스를 생성할 수 있어야 함', () => {
@@ -136,10 +136,10 @@ describe('defineStore', () => {
     it('객체 기본값을 처리할 수 있어야 함', () => {
       const store = defineStore('users', {
         id: field.string().primaryKey(),
-        address: field.object(t => ({
-          city: t.string(),
-          zipCode: t.string(),
-        })).default({ city: '', zipCode: '' }),
+        address: field.object({
+          city: field.string(),
+          zipCode: field.string(),
+        }).default({ city: '', zipCode: '' }),
       });
 
       expect(store.defaults.address).toEqual({ city: '', zipCode: '' });
@@ -167,7 +167,7 @@ describe('defineStore', () => {
       });
 
       expect(store.migrations).toHaveLength(1);
-      expect(store.migrations[0].name).toBe('001-seed-data');
+      expect(store.migrations[0]!.name).toBe('001-seed-data');
     });
 
     it('addMigration()으로 마이그레이션을 추가할 수 있어야 함', () => {
@@ -177,7 +177,7 @@ describe('defineStore', () => {
       }).addMigration('001-seed-admin', () => {});
 
       expect(store.migrations).toHaveLength(1);
-      expect(store.migrations[0].name).toBe('001-seed-admin');
+      expect(store.migrations[0]!.name).toBe('001-seed-admin');
     });
 
     it('addMigration()을 체이닝할 수 있어야 함', () => {
@@ -199,9 +199,9 @@ describe('defineStore', () => {
         .addMigration('001-first', () => {})
         .addMigration('002-second', () => {});
 
-      expect(store.migrations[0].name).toBe('001-first');
-      expect(store.migrations[1].name).toBe('002-second');
-      expect(store.migrations[2].name).toBe('003-third');
+      expect(store.migrations[0]!.name).toBe('001-first');
+      expect(store.migrations[1]!.name).toBe('002-second');
+      expect(store.migrations[2]!.name).toBe('003-third');
     });
   });
 

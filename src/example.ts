@@ -4,6 +4,7 @@
 
 import { openDB, defineStore, field, deleteDB } from './index.js';
 import type { InferStore } from './index.js';
+import { zodResolver } from './resolvers/zod/index.js';
 
 // ============================================================================
 // 1. Define Stores with Drizzle/Zod-style schema
@@ -23,31 +24,31 @@ const usersStore = defineStore('users', {
   age: field.number().optional().default(0).index(),
   
   // Object with schema (Zod style)
-  address: field.object(t => ({
-    detail: t.string(),
-    post: t.string(),
-    zipCode: t.number().optional(),
-  })).optional().default({ detail: '', post: '' }),
-  
+  address: field.object({
+    detail: field.string(),
+    post: field.string(),
+    zipCode: field.number().optional(),
+  }).optional().default({ detail: '', post: '' }),
+
   // Array (Zod style: .array() at the end)
   tags: field.string().array().optional(),
-  
+
   // Tuple
-  coordinate: field.tuple(t => [t.number(), t.number()]).optional(),
+  coordinate: field.tuple([field.number(), field.number()]).optional(),
   
   // Enum
   status: field.enum(['active', 'inactive', 'pending'] as const).default('active'),
   
   // Native Enum
   role: field.nativeEnum(UserRole).default(UserRole.User),
-});
+}).use(zodResolver()); // 런타임 검증: get 시 Zod 스키마로 레코드 검증
 
 const postsStore = defineStore('posts', {
   id: field.number().primaryKey(),
   title: field.string(),
   content: field.string(),
   authorId: field.string().index(),
-  createdAt: field.date().default(new Date()),
+  createdAt: field.date().default(() => new Date()), // 팩토리: add/put 시점마다 새 Date 생성
 })
 
 // ============================================================================
@@ -170,7 +171,7 @@ async function main() {
   // ================================
 
   // 트랜잭션 시작 - 사용할 스토어 명시
-  const tx = db.startTransaction(['users', 'posts'], { 
+  const tx = db.startTransaction(['users', 'posts'], {
     mode: 'write',
   });
 

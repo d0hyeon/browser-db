@@ -169,10 +169,10 @@ export function createStartTransaction<TStores extends readonly AnySchemaStore[]
     options: TransactionOptions = {}
   ): Transaction<TStores, TNames> {
     const storeNames = Array.isArray(storeNamesInput) ? storeNamesInput : [storeNamesInput];
-    const { mode, durability = 'default' } = options;
-    const idbMode: IDBTransactionMode = mode === 'write' ? 'readwrite' : 'readwrite';
-
-    const tx = db.transaction(storeNames, idbMode, { durability });
+    const { durability = 'default' } = options;
+    // 트랜잭션은 쓰기 전용(mode: 'write')이므로 항상 readwrite로 연다.
+    // 읽기는 단건 db.store.get() 통로를 사용한다 (트랜잭션 accessor의 get은 결과를 반환하지 않음).
+    const tx = db.transaction(storeNames, 'readwrite', { durability });
 
     // Create store accessors
     const storeAccessors: Record<string, TransactionStoreAccessor<StoreSchema>> = {};
