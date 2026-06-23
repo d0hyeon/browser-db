@@ -211,7 +211,7 @@ type InferObjectType<S extends ObjectSchema> = Prettify<
 // ============================================================================
 
 type InferTupleType<T extends TupleSchema> = {
-  [K in keyof T]: T[K] extends FieldBuilder<infer U, boolean, boolean, boolean, boolean, boolean> ? U : never;
+  -readonly [K in keyof T]: T[K] extends FieldBuilder<infer U, boolean, boolean, boolean, boolean, boolean> ? U : never;
 };
 
 // ============================================================================
@@ -293,7 +293,7 @@ export const field = {
    * @example
    * field.tuple([field.number(), field.number()])  // [number, number]
    */
-  tuple: <T extends TupleSchema>(items: T): FieldBuilder<InferTupleType<T>> => {
+  tuple: <const T extends TupleSchema>(items: T): FieldBuilder<InferTupleType<T>> => {
     const _items = items.map(i => (i as AnyFieldBuilder)._def as unknown as FieldDef);
     return createFieldBuilder<InferTupleType<T>>({ ...defaultDef(), _kind: 'tuple', _items });
   },
