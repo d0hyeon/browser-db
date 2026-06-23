@@ -121,8 +121,8 @@ describe('Query Builder', () => {
         orderBy: 'desc',
       });
 
-      expect(asc[0].price).toBeLessThanOrEqual(asc[1].price);
-      expect(desc[0].price).toBeGreaterThanOrEqual(desc[1].price);
+      expect(asc[0]!.price).toBeLessThanOrEqual(asc[1]!.price);
+      expect(desc[0]!.price).toBeGreaterThanOrEqual(desc[1]!.price);
     });
   });
 
@@ -202,7 +202,7 @@ describe('Query Builder', () => {
         .findAll();
 
       expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('p1');
+      expect(result[0]!.id).toBe('p1');
     });
 
     it('key().between()으로 키 범위를 조회해야 함', async () => {
@@ -225,7 +225,7 @@ describe('Query Builder', () => {
         .findAll();
 
       for (let i = 1; i < asc.length; i++) {
-        expect(asc[i].price).toBeGreaterThanOrEqual(asc[i - 1].price);
+        expect(asc[i]!.price).toBeGreaterThanOrEqual(asc[i - 1]!.price);
       }
     });
 
@@ -336,7 +336,7 @@ describe('Query Builder', () => {
         .findAll();
 
       expect(result).toHaveLength(1);
-      expect(result[0].id).toBe('p1');
+      expect(result[0]!.id).toBe('p1');
     });
 
     it('query().between()으로 직접 키 범위를 사용할 수 있어야 함', async () => {

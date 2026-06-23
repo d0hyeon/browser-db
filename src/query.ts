@@ -539,7 +539,9 @@ export interface TypedQueryBuilder<T, K, S extends StoreSchema> {
   key(): IndexQueryBuilder<T>;
   /** Get all records */
   findAll(): Promise<T[]>;
-  
+  /** Get first matching record */
+  find(): Promise<T | undefined>;
+
   // Direct condition methods (no index, uses key-based cursor scan)
   equals(value: K): FinalQueryBuilder<T>;
   gt(value: K): FinalQueryBuilder<T>;

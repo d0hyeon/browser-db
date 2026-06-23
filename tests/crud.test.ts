@@ -301,7 +301,7 @@ describe('CRUD 작업', () => {
 
       const users = await db.users.getAll();
       expect(users).toHaveLength(1);
-      expect(users[0].id).toBe('u3');
+      expect(users[0]!.id).toBe('u3');
     });
   });
 
@@ -407,8 +407,8 @@ describe('CRUD 작업', () => {
       await db.users.put({ id: 'u2', name: 'User 2', email: 'u2@test.com' } as any);
 
       const users = await db.users.getAll();
-      expect(users[0].age).toBe(0);
-      expect(users[1].age).toBe(0);
+      expect(users[0]!.age).toBe(0);
+      expect(users[1]!.age).toBe(0);
     });
 
     it('getAllBy()에서 기본값이 적용되어야 함', async () => {
@@ -417,7 +417,7 @@ describe('CRUD 작업', () => {
 
       const posts = await db.posts.getAllBy('authorId', 'author1');
       expect(posts[0]).toBeDefined();
-      expect(posts[0].title).toBe('Post 1');
+      expect(posts[0]!.title).toBe('Post 1');
     });
   });
 });

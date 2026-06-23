@@ -12,7 +12,7 @@ describe('StoreResolver .use()', () => {
     };
     const store = defineStore('users', { id: field.string().primaryKey() }).use(spy);
     expect(store.resolvers).toHaveLength(1);
-    expect(store.resolvers[0].name).toBe('spy');
+    expect(store.resolvers[0]!.name).toBe('spy');
   });
 
   it('use()는 원본을 변경하지 않는다', () => {

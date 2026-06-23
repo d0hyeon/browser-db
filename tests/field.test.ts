@@ -297,15 +297,15 @@ describe('Field Builder', () => {
     it('object는 _shape에 중첩 FieldDef를 보존한다', () => {
       const f = field.object({ id: field.string(), age: field.number() });
       expect(f._def._kind).toBe('object');
-      expect(f._def._shape?.id._kind).toBe('string');
-      expect(f._def._shape?.age._kind).toBe('number');
+      expect(f._def._shape?.id?._kind).toBe('string');
+      expect(f._def._shape?.age?._kind).toBe('number');
     });
 
     it('tuple은 _items에 위치별 FieldDef를 보존한다', () => {
       const f = field.tuple([field.number(), field.string()]);
       expect(f._def._kind).toBe('tuple');
-      expect(f._def._items?.[0]._kind).toBe('number');
-      expect(f._def._items?.[1]._kind).toBe('string');
+      expect(f._def._items?.[0]?._kind).toBe('number');
+      expect(f._def._items?.[1]?._kind).toBe('string');
     });
 
     it('array()는 _kind=array와 _element를 보존한다', () => {

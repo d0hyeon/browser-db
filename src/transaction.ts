@@ -26,7 +26,7 @@ type ConstrainedKey<S extends StoreSchema> = PrimaryKeyType<S> & IDBCompatibleKe
 // ============================================================================
 
 export interface TransactionOptions {
-  mode?: 'write';
+  mode?: 'readonly' | 'readwrite' | 'write';
   durability?: 'default' | 'strict' | 'relaxed';
 }
 
@@ -170,7 +170,7 @@ export function createStartTransaction<TStores extends readonly AnySchemaStore[]
   ): Transaction<TStores, TNames> {
     const storeNames = Array.isArray(storeNamesInput) ? storeNamesInput : [storeNamesInput];
     const { mode, durability = 'default' } = options;
-    const idbMode: IDBTransactionMode = mode === 'write' ? 'readwrite' : 'readwrite';
+    const idbMode: IDBTransactionMode = mode === 'readonly' ? 'readonly' : 'readwrite';
 
     const tx = db.transaction(storeNames, idbMode, { durability });
 

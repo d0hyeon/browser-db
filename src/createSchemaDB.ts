@@ -60,6 +60,8 @@ export interface SchemaStoreAccessor<S extends StoreSchema> {
   clear(): Promise<void>;
   count(query?: IDBKeyRange | IDBValidKey): Promise<number>;
 
+  raw<R>(fn: (store: IDBObjectStore) => IDBRequest<R>): Promise<R>;
+
   // Query API (type-safe)
   query(options: TypedQueryOptions<S>): Promise<InferOutput<S>[]>;
   query(): TypedQueryBuilder<InferOutput<S>, PrimaryKeyType<S>, S>;
