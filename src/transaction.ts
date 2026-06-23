@@ -26,7 +26,7 @@ type ConstrainedKey<S extends StoreSchema> = PrimaryKeyType<S> & IDBCompatibleKe
 // ============================================================================
 
 export interface TransactionOptions {
-  mode?: 'readonly' | 'readwrite' | 'write';
+  mode?: 'readonly' | 'readwrite';
   durability?: 'default' | 'strict' | 'relaxed';
 }
 

@@ -284,7 +284,7 @@ describe('Transaction', () => {
     });
 
     it('write 모드에서는 읽기/쓰기 모두 가능해야 함', async () => {
-      const tx = db.startTransaction(['accounts'], { mode: 'write' });
+      const tx = db.startTransaction(['accounts'], { mode: 'readwrite' });
 
       tx.accounts.get('acc1');
       tx.accounts.put({ id: 'acc3', name: 'Account 3', balance: 300 });
