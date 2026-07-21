@@ -113,16 +113,33 @@ describe('Field Builder', () => {
       expect(f._def._indexOptions?.unique).toBe(true);
     });
 
-    it('index({ multiEntry: true })는 멀티엔트리 인덱스를 생성해야 함', () => {
-      const f = field.string().index({ multiEntry: true });
+    it('multiEntry는 원시 타입 배열 필드에서만 사용할 수 있어야 함', () => {
+      const f = field.string().array().index({ multiEntry: true });
       expect(f._def._isIndexed).toBe(true);
       expect(f._def._indexOptions?.multiEntry).toBe(true);
     });
 
-    it('index()는 unique와 multiEntry 둘 다 설정할 수 있어야 함', () => {
-      const f = field.string().index({ unique: true, multiEntry: true });
+    it('배열 필드는 unique와 multiEntry 둘 다 설정할 수 있어야 함', () => {
+      const f = field.string().array().index({ unique: true, multiEntry: true });
       expect(f._def._indexOptions?.unique).toBe(true);
       expect(f._def._indexOptions?.multiEntry).toBe(true);
+    });
+
+    it('object 필드는 index()를 제공하지 않아야 함(타입 레벨)', () => {
+      const f = field.object({ id: field.string() });
+      // @ts-expect-error object 필드는 인덱싱할 수 없음
+      f.index;
+    });
+
+    it('object 배열 필드는 index()를 제공하지 않아야 함(타입 레벨)', () => {
+      const f = field.object({ id: field.string() }).array();
+      // @ts-expect-error object 배열은 인덱싱할 수 없음
+      f.index;
+    });
+
+    it('원시 스칼라 필드는 multiEntry 옵션을 받을 수 없어야 함(타입 레벨)', () => {
+      // @ts-expect-error multiEntry는 배열 필드에만 허용됨
+      field.string().index({ multiEntry: true });
     });
   });
 

@@ -26,6 +26,17 @@ export type FieldKind =
   | 'string' | 'number' | 'boolean' | 'date'
   | 'object' | 'tuple' | 'enum' | 'nativeEnum' | 'array' | 'custom';
 
+/**
+ * Indexing capability of a field:
+ * - 'none': cannot be indexed at all (object fields, and arrays of objects)
+ * - 'scalar': can be indexed, but `multiEntry` is not meaningful (non-array field)
+ * - 'array': can be indexed, including `multiEntry` (array of primitives)
+ */
+export type FieldIndexMode = 'none' | 'scalar' | 'array';
+
+/** IndexMode an array() field inherits from its element's IndexMode */
+type ArrayIndexMode<M extends FieldIndexMode> = M extends 'scalar' ? 'array' : 'none';
+
 export interface FieldDef<
   T = unknown,
   Optional extends boolean = false,
@@ -60,31 +71,52 @@ export interface FieldDef<
 // ============================================================================
 
 /**
+ * `index()` method surface, gated by IndexMode:
+ * - 'none': no `index()` method at all (object fields, arrays of objects)
+ * - 'scalar': `index()` available, but `multiEntry` is omitted from the options
+ * - 'array': `index()` available with the full `IndexOptions` (multiEntry allowed)
+ */
+type IndexMethod<
+  T,
+  Optional extends boolean,
+  HasDefault extends boolean,
+  AutoIncrement extends boolean,
+  IsPrimaryKey extends boolean,
+  IndexMode extends FieldIndexMode
+> = IndexMode extends 'none'
+  ? Record<never, never>
+  : {
+      /** Create an index on this field */
+      index(
+        options?: IndexMode extends 'array' ? IndexOptions : Omit<IndexOptions, 'multiEntry'>
+      ): FieldBuilder<T, Optional, HasDefault, true, AutoIncrement, IsPrimaryKey, IndexMode>;
+    };
+
+/**
  * Unified field builder interface
  * - autoIncrement option is only available when T extends number
  * - Uses conditional types for type-safe primaryKey options
+ * - `index()` is only exposed when IndexMode is 'scalar' or 'array' (see IndexMethod)
  */
-export interface FieldBuilder<
+export type FieldBuilder<
   T,
   Optional extends boolean = false,
   HasDefault extends boolean = false,
   IsIndexed extends boolean = false,
   AutoIncrement extends boolean = false,
-  IsPrimaryKey extends boolean = false
-> {
+  IsPrimaryKey extends boolean = false,
+  IndexMode extends FieldIndexMode = 'scalar'
+> = {
   _def: FieldDef<T, Optional, HasDefault, IsIndexed, AutoIncrement, IsPrimaryKey>;
 
   /** Mark field as optional (can be undefined) */
-  optional(): FieldBuilder<T, true, HasDefault, IsIndexed, AutoIncrement, IsPrimaryKey>;
+  optional(): FieldBuilder<T, true, HasDefault, IsIndexed, AutoIncrement, IsPrimaryKey, IndexMode>;
 
   /** Set default value or factory function */
-  default(value: T | (() => T)): FieldBuilder<T, Optional, true, IsIndexed, AutoIncrement, IsPrimaryKey>;
-
-  /** Create an index on this field */
-  index(options?: IndexOptions): FieldBuilder<T, Optional, HasDefault, true, AutoIncrement, IsPrimaryKey>;
+  default(value: T | (() => T)): FieldBuilder<T, Optional, true, IsIndexed, AutoIncrement, IsPrimaryKey, IndexMode>;
 
   /** Convert to array type */
-  array(): FieldBuilder<T[], Optional, HasDefault, IsIndexed, false, false>;
+  array(): FieldBuilder<T[], Optional, HasDefault, IsIndexed, false, false, ArrayIndexMode<IndexMode>>;
 
   /**
    * Mark as primary key
@@ -94,9 +126,9 @@ export interface FieldBuilder<
   primaryKey<Options extends PrimaryKeyOptions<T>>(
     options?: Options
   ): Options extends { autoIncrement: true }
-    ? FieldBuilder<T, true, HasDefault, IsIndexed, true, true>
-    : FieldBuilder<T, Optional, HasDefault, IsIndexed, false, true>
-}
+    ? FieldBuilder<T, true, HasDefault, IsIndexed, true, true, IndexMode>
+    : FieldBuilder<T, Optional, HasDefault, IsIndexed, false, true, IndexMode>
+} & IndexMethod<T, Optional, HasDefault, AutoIncrement, IsPrimaryKey, IndexMode>;
 
 // ============================================================================
 // Field Builder Implementation
@@ -122,12 +154,15 @@ function createFieldBuilder<
   IsIndexed extends boolean = false,
   AutoIncrement extends boolean = false,
   IsPrimaryKey extends boolean = false,
+  IndexMode extends FieldIndexMode = 'scalar',
 >(
   def?: FieldDef<T, Optional, HasDefault, IsIndexed, AutoIncrement, IsPrimaryKey>
-): FieldBuilder<T, Optional, HasDefault, IsIndexed, AutoIncrement, IsPrimaryKey> {
+): FieldBuilder<T, Optional, HasDefault, IsIndexed, AutoIncrement, IsPrimaryKey, IndexMode> {
   const resolvedDef = (def ?? defaultDef<T>()) as FieldDef<T, Optional, HasDefault, IsIndexed, AutoIncrement, IsPrimaryKey>;
 
-  const builder: FieldBuilder<T, Optional, HasDefault, IsIndexed, AutoIncrement, IsPrimaryKey> = {
+  // IndexMode는 컴파일 타임에만 존재하는 태그이므로, 런타임 구현은 항상 index()를 노출하고
+  // 노출 여부/옵션 제한은 반환 타입(FieldBuilder<..., IndexMode>)에서만 강제한다.
+  const builder = {
     _def: resolvedDef,
 
     optional() {
@@ -161,7 +196,7 @@ function createFieldBuilder<
     },
   };
 
-  return builder;
+  return builder as unknown as FieldBuilder<T, Optional, HasDefault, IsIndexed, AutoIncrement, IsPrimaryKey, IndexMode>;
 }
 
 // ============================================================================
@@ -180,12 +215,12 @@ type Prettify<T> = {
 // ============================================================================
 
 /** FieldBuilder 기반 object/tuple 스키마 타입 */
-type AnyFieldBuilder = FieldBuilder<unknown, boolean, boolean, boolean, boolean, boolean>;
+type AnyFieldBuilder = FieldBuilder<unknown, boolean, boolean, boolean, boolean, boolean, FieldIndexMode>;
 type ObjectSchema = Record<string, AnyFieldBuilder>;
 type TupleSchema = readonly AnyFieldBuilder[];
 
 /** FieldBuilder에서 타입 추출 (_optional/_hasDefault 규칙 유지) */
-type InferFieldBuilderType<T> = T extends FieldBuilder<infer U, infer Optional, infer HasDefault, boolean, boolean, boolean>
+type InferFieldBuilderType<T> = T extends FieldBuilder<infer U, infer Optional, infer HasDefault, boolean, boolean, boolean, infer _IndexMode>
   ? HasDefault extends true
     ? U
     : Optional extends true
@@ -195,7 +230,7 @@ type InferFieldBuilderType<T> = T extends FieldBuilder<infer U, infer Optional, 
 
 // Required keys: _optional=false, _hasDefault=false
 type ObjectRequiredKeys<S extends ObjectSchema> = {
-  [K in keyof S]: S[K] extends FieldBuilder<unknown, false, false, boolean, boolean, boolean> ? K : never;
+  [K in keyof S]: S[K] extends FieldBuilder<unknown, false, false, boolean, boolean, boolean, FieldIndexMode> ? K : never;
 }[keyof S];
 
 // Optional keys
@@ -211,7 +246,7 @@ type InferObjectType<S extends ObjectSchema> = Prettify<
 // ============================================================================
 
 type InferTupleType<T extends TupleSchema> = {
-  -readonly [K in keyof T]: T[K] extends FieldBuilder<infer U, boolean, boolean, boolean, boolean, boolean> ? U : never;
+  -readonly [K in keyof T]: T[K] extends FieldBuilder<infer U, boolean, boolean, boolean, boolean, boolean, FieldIndexMode> ? U : never;
 };
 
 // ============================================================================
@@ -274,18 +309,24 @@ export const field = {
 
   /**
    * Object field with schema definition
+   *
+   * Object fields cannot be indexed (`.index()` is not available): a plain
+   * object is not a valid IndexedDB key, so this is enforced at the type level.
+   * To query by a nested value, index that leaf field individually and query
+   * by it directly instead of through the parent object field.
+   *
    * @example
    * field.object({
    *   name: field.string(),
    *   age: field.number().optional(),
    * })
    */
-  object: <S extends ObjectSchema>(shape: S): FieldBuilder<InferObjectType<S>> => {
+  object: <S extends ObjectSchema>(shape: S): FieldBuilder<InferObjectType<S>, false, false, false, false, false, 'none'> => {
     const _shape: Record<string, FieldDef> = {};
     for (const [k, v] of Object.entries(shape)) {
       _shape[k] = (v as AnyFieldBuilder)._def as unknown as FieldDef;
     }
-    return createFieldBuilder<InferObjectType<S>>({ ...defaultDef(), _kind: 'object', _shape });
+    return createFieldBuilder<InferObjectType<S>, false, false, false, false, false, 'none'>({ ...defaultDef(), _kind: 'object', _shape });
   },
 
   /**
@@ -327,7 +368,7 @@ export const field = {
 // ============================================================================
 
 /** Schema definition type */
-export type StoreSchema = Record<string, FieldBuilder<unknown, boolean, boolean, boolean, boolean, boolean>>;
+export type StoreSchema = Record<string, FieldBuilder<unknown, boolean, boolean, boolean, boolean, boolean, FieldIndexMode>>;
 
 /** Extract required input keys (not optional, no default, not autoIncrement) */
 type RequiredInputKeys<S extends StoreSchema> = {
